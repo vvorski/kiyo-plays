@@ -4616,7 +4616,7 @@ entry reaches a rendered surface, a shader, the HUD or the gate.
 6.8 MB out of `node_modules`, zero runtime bytes either way.
 
 ### 145. kiyo.flyflyfly.tv
-`status: ready` · added 2026-09-05 · **build after 144, then 142** — 144 purges
+`status: building` · started 2026-09-06 · added 2026-09-05 · **build after 144, then 142** — 144 purges
 Cloudflare as a *host*, 142 renames the repo, and this one brings Cloudflare
 back as *DNS only*; in any other order the three fight over the same doc lines ·
 **the DNS half is already executed — see Progress** · the GitHub Pages half is

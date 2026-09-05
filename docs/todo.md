@@ -4454,7 +4454,7 @@ leaving two entries quietly disagreeing about what a held space bar does.
 **Hard stops** — prefs no · url no · capture no · dependency no.
 
 ### 144. Cloudflare leaves the repository
-`status: ready` · added 2026-09-05 · **build before 142, then 145** — it
+`status: building` · started 2026-09-05 · added 2026-09-05 · **build before 142, then 145** — it
 overlaps 142 on six files and strikes 142's Cloudflare parts, so building it
 second means renaming things this entry then deletes · **not contradicted by
 145**: that entry brings Cloudflare back as *DNS only*, never as a host, and

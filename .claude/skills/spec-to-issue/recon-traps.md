@@ -124,7 +124,7 @@ work. Novelty answers "did the energy move to different bands".
 
 ## Deploy and hosting
 
-- **GitHub Pages is `vvorski.github.io/suti-view-2026`**, not the organisation
+- **GitHub Pages is `vvorski.github.io/kiyo-plays`**, not the organisation
   account. Checking the wrong host reports a stale bundle that is not stale.
 - **The build number is `git rev-list --count HEAD`** and CI needs
   `fetch-depth: 0` for it. A shallow clone silently produces build 1.

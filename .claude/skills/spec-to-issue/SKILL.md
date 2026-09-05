@@ -1,6 +1,6 @@
 ---
 name: spec-to-issue
-description: Use when turning a suti-view-2026 issue into a specification another agent will implement, when triaging whether an issue is ready to hand off, or when an agent came back blocked on an issue that looked fully specified.
+description: Use when turning a kiyo-plays issue into a specification another agent will implement, when triaging whether an issue is ready to hand off, or when an agent came back blocked on an issue that looked fully specified.
 ---
 
 # spec-to-issue
@@ -9,7 +9,7 @@ description: Use when turning a suti-view-2026 issue into a specification anothe
 
 Produce a spec, post it as a comment on the issue it specifies. No `specs/`
 file — the issue is the single artifact. Issues and code live in the same repo,
-`vvorski/suti-view-2026`, so `gh issue` needs no `--repo`.
+`vvorski/kiyo-plays`, so `gh issue` needs no `--repo`.
 
 **Core principle: a spec is ready when an agent with no memory of this
 conversation can execute it without making one judgement call you could have
@@ -184,7 +184,7 @@ Adapted from the METIS project's `spec-to-issue`, whose Approvals /
 ask-in-rounds / hard-stop-verdict / red-flags structure is unaltered — those
 failure modes are project-agnostic.
 
-What changed for suti-view-2026: one repo instead of a split code/tracker pair,
+What changed for kiyo-plays: one repo instead of a split code/tracker pair,
 so `gh` needs no `--repo`; the Hard Stop categories are this project's four
 (preferences, URL shape, capture/privacy, dependencies) rather than METIS's
 three; the test lanes are the build gate, headless probes and the browser, with

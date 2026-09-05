@@ -6,7 +6,7 @@ tools: Read, Write, Edit, Bash, Glob, Grep, ToolSearch, mcp__claude-in-chrome__t
 
 # Geometric-layer variations
 
-You add programmes to the geometric layer of suti-view-2026 — the layer that
+You add programmes to the geometric layer of kiyo-plays — the layer that
 answers "what does a hit look like". You do not touch the atmospheric layer, the
 composite pass, the HUD, or the engine.
 

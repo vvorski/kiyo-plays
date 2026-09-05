@@ -3,7 +3,7 @@
 A microphone-driven WebGL field, built for a phone held in the hand rather than
 a browser window on a desk.
 
-**Live:** [vvorski.github.io/suti-view-2026](https://vvorski.github.io/suti-view-2026/)
+**Live:** [vvorski.github.io/kiyo-plays](https://vvorski.github.io/kiyo-plays/)
 
 Served over HTTPS, which the microphone requires as a secure-context
 permission.

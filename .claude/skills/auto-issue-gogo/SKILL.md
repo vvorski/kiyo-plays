@@ -5,8 +5,8 @@ description: Use when asked to work the ready queue autonomously — take each i
 
 # Working the ready queue end to end
 
-Takes every issue labelled **`status:ready`** in `vvorski/suti-view-2026` and
-carries it to `main` and to both hosts, one at a time.
+Takes every issue labelled **`status:ready`** in `vvorski/kiyo-plays` and
+carries it to `main` and to the deploy, one at a time.
 
 The loop is: **select → branch → fix → probe → review → browser → gates → merge
 → deploy → report → next**.
@@ -235,7 +235,7 @@ GitHub Pages deploys itself from `main` via `.github/workflows/pages.yml`. Wait
 for it, then confirm the new bundle is live:
 
 ```bash
-curl -s https://vvorski.github.io/suti-view-2026/ | grep -o 'index-[A-Za-z0-9_-]*\.js' | head -1
+curl -s https://vvorski.github.io/kiyo-plays/ | grep -o 'index-[A-Za-z0-9_-]*\.js' | head -1
 ```
 
 Two different hashes means one host is stale — say so rather than reporting a
@@ -275,7 +275,7 @@ Then return to §1 — labels may have moved under you.
   `origin/main`;
 - the same fix fails on-screen verification twice — stop rather than iterate
   blind;
-- a deploy leaves the two hosts on different bundles and a retry does not fix it;
+- a deploy does not publish the new bundle and a retry does not fix it;
 - anything wants a **new runtime dependency**, however small it looks.
 
 ## Provenance
@@ -286,7 +286,7 @@ discipline, the review-then-review-the-corrections step, and the
 verify-the-merge-actually-landed step are unaltered — those are project-agnostic
 and each was learned the hard way.
 
-What changed for suti-view-2026: the queue is the `status:` label family rather
+What changed for kiyo-plays: the queue is the `status:` label family rather
 than a Project board column, since this repo has no board (so §9's `gh project
 item-edit` GraphQL dance is replaced by `gh issue edit --add-label`); the test
 lane is `pnpm build`/`lint` plus the three headless probes rather than a Django

@@ -241,7 +241,7 @@ Read a few files before writing any.
   regression is a regression. Nothing needing COOP/COEP headers can ever work,
   because GitHub Pages cannot set them — that rules out `SharedArrayBuffer`.
 - **GitHub Pages is the deploy, and the only one** —
-  `vvorski.github.io/suti-view-2026`, *not* the org account. It builds from
+  `vvorski.github.io/kiyo-plays`, *not* the org account. It builds from
   `main` only: the `github-pages` environment has a branch rule, so a
   `workflow_dispatch` on any other ref builds happily and is then refused at
   the deploy step. Merge first. Do not delete `checks.yml` to tidy up —

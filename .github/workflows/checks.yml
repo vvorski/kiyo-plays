@@ -1,18 +1,9 @@
 name: Checks
 
-# This was the Cloudflare Pages deploy. Cloudflare is parked: the deploy step
-# needed CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID as repository secrets,
-# they were never set, and so every push to main produced a red X for a target
-# nobody was reading. GitHub Pages carries the site on its own.
-#
-# The file survives rather than being deleted because the deploy was only its
-# last step. Everything above it — lint, typecheck, build, and now the probes —
-# is the only CI this repo has that pages.yml does not duplicate: that workflow
-# runs `pnpm build` (which does typecheck) but never `pnpm lint`. Deleting this
-# to silence the X would have quietly dropped the lint gate.
-#
-# To bring Cloudflare back: add the two secrets, then restore the step from
-# git history (`git log -- .github/workflows/deploy.yml`).
+# Lint, typecheck, build and the headless probes — the CI this repo runs on
+# every push and pull request. It is not the deploy; pages.yml is. It exists
+# separately because pages.yml runs `pnpm build` (which does typecheck) but
+# never `pnpm lint`, so this file is the only place the lint gate runs.
 
 on:
   push:
@@ -34,8 +25,7 @@ jobs:
         with:
           # vite.config.ts shells out to `git rev-list --count HEAD` for the
           # on-screen build number — needs full history, not the default
-          # shallow clone, or it undercounts (and would disagree with the
-          # GitHub Pages build of the same commit).
+          # shallow clone, or it undercounts.
           fetch-depth: 0
 
       - uses: pnpm/action-setup@v4

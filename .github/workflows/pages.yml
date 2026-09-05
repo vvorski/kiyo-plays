@@ -1,17 +1,11 @@
 name: GitHub Pages
 
-# The deploy. The only one — Cloudflare is parked (see checks.yml), and was
-# never really deploying anyway: its token was never set, so every push to main
-# produced a red X beside this workflow's green tick.
+# The deploy. GitHub Pages needs nothing but a public repo — no account, no
+# token, no dashboard visit.
 #
-# Written as the fallback, and it became the whole thing for exactly the reason
-# it was worth having: a github.io URL needs nothing but a public repo — no
-# account, no token, no dashboard visit.
-#
-# BASE_PATH is the one thing a second host would have to differ on: GitHub
-# serves under /<repo>/, Cloudflare served at the root of its own subdomain.
-# vite.config.ts reads it and defaults to "/", so bringing a second host back
-# needs no change here.
+# BASE_PATH is supplied below by actions/configure-pages, which resolves it to
+# "/<repo>/" for a project site; vite.config.ts defaults to "/" for pnpm dev
+# and vite preview, where no such prefix applies.
 
 on:
   push:
@@ -37,8 +31,7 @@ jobs:
         with:
           # vite.config.ts shells out to `git rev-list --count HEAD` for the
           # on-screen build number — needs full history, not the default
-          # shallow clone, or it undercounts (and would disagree with the
-          # locally-built Cloudflare deploy of the same commit).
+          # shallow clone, or it undercounts.
           fetch-depth: 0
 
       - uses: pnpm/action-setup@v4

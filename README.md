@@ -2,8 +2,7 @@
 
 I listen to the room through the phone's own ear, and I draw what I hear.
 
-**Live:** [suti-view-2026.pages.dev](https://suti-view-2026.pages.dev) ·
-[vvorski.github.io/suti-view-2026](https://vvorski.github.io/suti-view-2026/)
+**Live:** [vvorski.github.io/suti-view-2026](https://vvorski.github.io/suti-view-2026/)
 
 Tap to begin and grant the microphone. Tap again, twice, for the controls.
 Nothing you give me leaves the phone — not the sound, not the camera, not the

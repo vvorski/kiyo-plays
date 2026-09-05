@@ -3,12 +3,10 @@
 A microphone-driven WebGL field, built for a phone held in the hand rather than
 a browser window on a desk.
 
-**Live:** [suti-view-2026.pages.dev](https://suti-view-2026.pages.dev) ·
-[vvorski.github.io/suti-view-2026](https://vvorski.github.io/suti-view-2026/)
+**Live:** [vvorski.github.io/suti-view-2026](https://vvorski.github.io/suti-view-2026/)
 
-Both serve the same build. Cloudflare Pages is the primary target; GitHub Pages
-is there because it needs nothing but a public repo. Either works on a phone —
-the microphone requires a secure context, and both are HTTPS.
+Served over HTTPS, which the microphone requires as a secure-context
+permission.
 
 Tap to begin and grant the microphone. **Tap anywhere again** for the HUD — a
 120° dial in the bottom-right corner carrying the two layers, the merge mode,
@@ -589,22 +587,10 @@ reclaim contexts routinely when a tab is backgrounded.
 
 ## Deploying
 
-Two targets, both on push to `main`.
+**GitHub Pages** (`.github/workflows/pages.yml`), on push to `main`. Needs no
+configuration at all beyond the repo being public — no token, no account, no
+dashboard.
 
-**GitHub Pages** (`.github/workflows/pages.yml`) needs no configuration at all
-beyond the repo being public — no token, no account, no dashboard.
-
-**Cloudflare Pages** (`.github/workflows/deploy.yml`) needs two repository
-secrets, both created by hand in the Cloudflare dashboard:
-
-- `CLOUDFLARE_API_TOKEN` — a token with `Pages:Edit`
-- `CLOUDFLARE_ACCOUNT_ID`
-
-Until those exist that workflow fails at its last step; everything before it
-still runs, so CI remains a useful check. `./deploy/deploy.sh` deploys to
-Cloudflare from a machine with an authenticated `wrangler` session, no secrets
-required.
-
-The only difference between the two builds is `BASE_PATH`: Cloudflare serves at
-the root of its own subdomain, GitHub under `/<repo>/`. `vite.config.ts` reads
-it and defaults to `/`.
+`BASE_PATH` is supplied by `actions/configure-pages`, which resolves it to
+`/<repo>/`; `vite.config.ts` defaults to `/`, which is what `pnpm dev` and
+`vite preview` need.

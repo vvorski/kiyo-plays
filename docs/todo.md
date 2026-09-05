@@ -4454,7 +4454,7 @@ leaving two entries quietly disagreeing about what a held space bar does.
 **Hard stops** — prefs no · url no · capture no · dependency no.
 
 ### 144. Cloudflare leaves the repository
-`status: building` · started 2026-09-05 · added 2026-09-05 · **build before 142, then 145** — it
+`status: done` · added 2026-09-05 · build 465 · **build before 142, then 145** — it
 overlaps 142 on six files and strikes 142's Cloudflare parts, so building it
 second means renaming things this entry then deletes · **not contradicted by
 145**: that entry brings Cloudflare back as *DNS only*, never as a host, and
@@ -4581,8 +4581,13 @@ deleted, one is left alone, one is the queue itself.
    and `docs/todo.md`. Nothing in `src/`, `README.md`, `CLAUDE.md`,
    `docs/how-it-works.md`, `.github/`, `.claude/`, `package.json` or
    `vite.config.ts`.
-2. `deploy/` does not exist, and `pnpm deploy` fails with pnpm's own
-   "command not found" rather than running anything.
+2. `deploy/` does not exist, and `pnpm deploy` fails without running anything.
+   **Corrected against the actual build**: `deploy` is a reserved pnpm
+   subcommand, so removing the project's own `"deploy"` script does not make
+   pnpm report "command not found" — it falls through to pnpm's own workspace
+   deploy and fails with `ERR_PNPM_CANNOT_DEPLOY: A deploy is only possible
+   from inside a workspace`, which this is not. Still a failure, still runs
+   nothing; the mechanism just is not the one this line originally named.
 3. `pnpm install --frozen-lockfile` succeeds against the committed lockfile —
    the proof it was regenerated rather than pruned by hand.
 4. `.github/workflows/checks.yml` still exists and still runs `pnpm lint`,

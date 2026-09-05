@@ -229,23 +229,13 @@ labelling anything. A run that reports six merges and delivered five is worse
 than one that stops at the first failure — the labels say done, `main` says
 otherwise, and nobody looks again.
 
-## 9. Deploy, and confirm both hosts
-
-The CI Cloudflare deploy has **never worked** — the token was never set as a
-repo secret, and every CI Cloudflare run has failed since the first. Do not try
-to fix it; that needs a token only the user can create.
-
-```bash
-./deploy/deploy.sh                       # Cloudflare, from this checkout
-```
+## 9. Deploy, and confirm it landed
 
 GitHub Pages deploys itself from `main` via `.github/workflows/pages.yml`. Wait
-for it, then confirm **both** hosts serve the same new bundle:
+for it, then confirm the new bundle is live:
 
 ```bash
-for u in https://suti-view-2026.pages.dev/ https://vvorski.github.io/suti-view-2026/; do
-  printf '%s -> ' "$u"; curl -s "$u" | grep -o 'index-[A-Za-z0-9_-]*\.js' | head -1
-done
+curl -s https://vvorski.github.io/suti-view-2026/ | grep -o 'index-[A-Za-z0-9_-]*\.js' | head -1
 ```
 
 Two different hashes means one host is stale — say so rather than reporting a
@@ -302,8 +292,8 @@ item-edit` GraphQL dance is replaced by `gh issue edit --add-label`); the test
 lane is `pnpm build`/`lint` plus the three headless probes rather than a Django
 suite; there is no `merge-to-main.sh`, so §8 is an explicit PR-and-squash and
 the "verify it landed" step guards a different failure; a deploy step was added
-because CI cannot publish to Cloudflare and both hosts have to be confirmed
-serving the same bundle; the browser step is a throwaway probe page against a
+to confirm GitHub Pages actually published the new bundle; the browser step is
+a throwaway probe page against a
 local dev server rather than an authenticated session on a shared dev site, and
 carries this project's three specific harness traps; and a device lane was added
 for the things a desktop browser cannot check at all.

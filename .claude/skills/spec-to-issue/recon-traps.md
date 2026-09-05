@@ -124,11 +124,6 @@ work. Novelty answers "did the energy move to different bands".
 
 ## Deploy and hosting
 
-- **The CI Cloudflare deploy has never worked.** `CLOUDFLARE_API_TOKEN` was
-  never set as a repo secret, so every CI Cloudflare run has failed since the
-  first. `./deploy/deploy.sh` from a local checkout is the working path. Do not
-  spec a "fix" that guesses at credentials — the token has to be created by the
-  user in the Cloudflare dashboard.
 - **GitHub Pages is `vvorski.github.io/suti-view-2026`**, not the organisation
   account. Checking the wrong host reports a stale bundle that is not stale.
 - **The build number is `git rev-list --count HEAD`** and CI needs

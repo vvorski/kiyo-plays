@@ -4138,7 +4138,10 @@ the third view of the same idea. Then a phone. Then the atmospheric band at
 (`?atmospheric=anneal`) · capture no · dependency no.
 
 ### 141. Pick up an emitter and put it down somewhere else
-`status: building` · started 2026-09-06 · added 2026-09-05 · **build after 132** (it moves the anchor 132's bob hangs from) · extends 33 and 57
+`status: done` · added 2026-09-05 · build 485 · **shipped for the
+single-emitter views only (Circles, Shards, Grid, Rose) — Chorus's several
+nodes are entry 146, not built here, see build note** · build after 132 (it
+moves the anchor 132's bob hangs from) · extends 33 and 57
 
 **Do** — on the geometric views whose emitters have a fixed place on screen,
 a press that lands **on** an emitter picks it up: it follows the finger while

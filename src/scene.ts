@@ -44,6 +44,8 @@ import {
   createRgbSlipState,
   createOriginState,
   resetOrigin,
+  setAnchor,
+  pickEmitter,
   createRippleState,
   createTouchStreamState,
   Envelope,
@@ -406,6 +408,28 @@ export interface Visualiser {
    * regardless.
    */
   setTouches(touches: ReadonlyArray<{ contactId: number; x: number; y: number; speed: number }>): void
+  /**
+   * docs/todo.md entry 141 — a contact currently holding the centre-anchored
+   * emitter (Circles, Shards, Grid, Rose only — see origin.ts's own
+   * `pickEmitter` comment for why Chorus's several nodes are a separate,
+   * unshipped entry). `pos` while held is the live fingertip in the same
+   * shader-uv space `setTouches` takes — `uOrigin` becomes exactly this,
+   * every frame, no spring; `null` ends the drag and anchors the spring (or,
+   * with `grav` off, the picture itself) at wherever `pos` last was, via
+   * `origin.ts`'s `setAnchor`. Main.ts calls this at most once per frame,
+   * for whichever single contact (if any) claimed the emitter on its own
+   * `down` — the claim, not the drag, is what is exclusive.
+   */
+  setEmitterDrag(pos: { x: number; y: number } | null): void
+  /**
+   * docs/todo.md entry 141 — is `(x, y)` (the same shader-uv `setTouches`
+   * takes) within `radiusUv` of the centre-anchored emitter right now?
+   * `origin.ts`'s own `pickEmitter` against the current `anchorX`/`anchorY`
+   * — a query rather than exposing the anchor's own coordinates, since
+   * nothing outside this file has ever needed to read scene state before
+   * writing to it and this entry is not the place to start.
+   */
+  hitTestEmitter(x: number, y: number, radiusUv: number): boolean
   /**
    * A mouse cursor over the picture — docs/todo.md entry 112. `x`/`y` are
    * the same shader-uv pair `setTouches` takes; `speed` is the same smoothed
@@ -913,12 +937,20 @@ export function createVisualiser(
   let emitterGravityX = 0
   let emitterGravityY = 0
   // docs/todo.md entry 132 — the geometric layer's own centre, hanging on a
-  // spring under that same gravity. Written to `uOrigin` only while the
-  // `grav` chip is on; the moment it goes off the bob is reset and the
-  // uniform is left at exactly (0, 0), which is what makes every geometric
-  // shader's `uv - uOrigin` bit-identical to the build before this entry.
+  // spring under that same gravity. `uOrigin` is now written every frame
+  // (docs/todo.md entry 141 changed this — see the render loop below): while
+  // the `grav` chip is off it is simply held at the anchor rather than left
+  // unwritten at a stale value, which is what lets a drag move the anchor
+  // regardless of whether gravity is on.
   const originState = createOriginState()
   let gravityOn = false
+  // docs/todo.md entry 141 — the emitter currently being dragged, if any.
+  // `null` means nothing is held: the anchor and the spring behave exactly
+  // as entry 132 left them. While non-null, `uOrigin` is the fingertip
+  // itself every frame — no spring, no lag, per Decided — and the anchor is
+  // only written back (via `setAnchor`) on release, which is what makes the
+  // drop point the new hanging point rather than a place passed through.
+  let emitterDrag: { x: number; y: number } | null = null
   // docs/todo.md entry 76 — ticked from the same `motionDisturb` above,
   // already recorded here every frame by `setMotion` for the colour bias.
   // No new setter: this is the "no new plumbing at all" the entry asks for.
@@ -1242,17 +1274,17 @@ export function createVisualiser(
       // tracks, so a fall bounces off the edge actually on screen (a
       // landscape phone's true bottom) rather than an assumed square one.
       // docs/todo.md entry 132 — the bob, ticked on the same clock as the
-      // emitter pool below and fed the same gravity. Only while the `grav`
-      // chip is on: with it off the uniform is never written and stays at
-      // exactly (0, 0), so the seven geometric shaders are bit-identical.
+      // emitter pool below and fed the same gravity. `compositeUniforms.
+      // uGravity` is still gated on `gravityOn` alone, unchanged by entry
+      // 141 below: it is the atmosphere's own brightness weighting, has
+      // nothing to do with the anchor, and stays exactly the effect entry
+      // 132 shipped.
       //
       // The tilt is the uncapped pair (`motionTiltX/Y`), not the capped
       // `emitterGravity` — the cap exists so a *slide* cannot expose the
       // frame's edge, and moving the origin exposes nothing, so the bob is
       // entitled to the full reading.
       if (gravityOn) {
-        updateOrigin(originState, dt, motionTiltX, motionTiltY, slipAccelX, slipAccelY)
-        uniforms.uOrigin.value.set(originState.x, originState.y)
         // The uncapped tilt, not the capped `shake.gravity()` the entry's
         // Lands-in names — and that is a correction rather than a liberty.
         // The entry specifies "upright, the field reads 25% denser along the
@@ -1264,6 +1296,23 @@ export function createVisualiser(
         // brightness gradient exposes nothing, so it is entitled to the full
         // reading — the same reason the bob above takes the uncapped pair.
         compositeUniforms.uGravity.value.set(motionTiltX, motionTiltY)
+      }
+      // docs/todo.md entry 141 — `uOrigin` is now written every frame,
+      // unconditionally, in one of three ways: a live drag overrides
+      // everything else (no spring, no lag, whatever gravity is doing);
+      // otherwise the spring runs exactly as entry 132 left it while
+      // `grav` is on; otherwise the anchor is held directly, static, which
+      // is what makes a drag with `grav` off simply place the centre with
+      // nothing pulling it anywhere afterwards. `originState.anchorX/Y`
+      // default to `(0, 0)`, so with no drag ever made this is bit-for-bit
+      // what entry 132 already did.
+      if (emitterDrag) {
+        uniforms.uOrigin.value.set(emitterDrag.x, emitterDrag.y)
+      } else if (gravityOn) {
+        updateOrigin(originState, dt, motionTiltX, motionTiltY, slipAccelX, slipAccelY)
+        uniforms.uOrigin.value.set(originState.x, originState.y)
+      } else {
+        uniforms.uOrigin.value.set(originState.anchorX, originState.anchorY)
       }
       const emitterGravity = { x: emitterGravityX, y: emitterGravityY }
       const emitterHalfExtent = {
@@ -1575,6 +1624,34 @@ export function createVisualiser(
       touches = next
     },
 
+    hitTestEmitter(x, y, radiusUv) {
+      return pickEmitter(originState, x, y, radiusUv)
+    },
+
+    setEmitterDrag(pos) {
+      if (pos) {
+        emitterDrag = pos
+      } else if (emitterDrag) {
+        // Anchor at the drop point before clearing the live drag — the
+        // render loop's own branch order means a frame that both ends a
+        // drag and renders would otherwise read the now-null `emitterDrag`
+        // and fall through to the *old* anchor for one frame, a visible
+        // pop back before the new anchor takes hold. The spring's own
+        // position is snapped there too, not only its target: while held
+        // there was no spring at all (Decided's "no lag"), so
+        // `originState.x/y` is whatever it last was before the drag began
+        // — possibly nowhere near the drop point — and leaving it would
+        // show one frame of the bob leaping from the old spot to the new
+        // one before the swing could even start.
+        setAnchor(originState, emitterDrag.x, emitterDrag.y)
+        originState.x = emitterDrag.x
+        originState.y = emitterDrag.y
+        originState.vx = 0
+        originState.vy = 0
+        emitterDrag = null
+      }
+    },
+
     setTouchStream(began, anyDown, maxSpeed) {
       // OR'd onto whatever this frame already recorded rather than
       // overwritten, so a `began` reported by one dispatch pass within the
@@ -1615,14 +1692,17 @@ export function createVisualiser(
     setGravity(g) {
       emitterGravityX = g?.x ?? 0
       emitterGravityY = g?.y ?? 0
-      // docs/todo.md entry 132. Turning the chip off puts the bob back at the
-      // centre at once rather than leaving the picture hanging off-centre
-      // with the feature disabled — and makes the next switch-on start from
-      // rest instead of from wherever it was left.
+      // docs/todo.md entry 132. Turning the chip off puts the bob back at
+      // rest on the anchor at once rather than leaving the picture hanging
+      // off-anchor with the feature disabled — and makes the next
+      // switch-on start from rest instead of from wherever the swing was
+      // left. `uOrigin` itself is no longer set here (docs/todo.md entry
+      // 141 made it a per-frame write in the render loop above, which picks
+      // up the anchor on the very next frame) — only `compositeUniforms.
+      // uGravity`, which nothing else resets.
       const on = g !== null
       if (gravityOn && !on) {
         resetOrigin(originState)
-        uniforms.uOrigin.value.set(0, 0)
         compositeUniforms.uGravity.value.set(0, 0)
       }
       gravityOn = on

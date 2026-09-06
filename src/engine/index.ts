@@ -112,7 +112,7 @@ export type { CameraArmState, CameraArmReading } from './camera-arm.ts'
 
 export { isFlatTilt, FLAT_TILT_MIN } from './tilt.ts'
 
-export { createOriginState, updateOrigin, resetOrigin, ORIGIN_SAG } from './origin.ts'
+export { createOriginState, updateOrigin, resetOrigin, setAnchor, pickEmitter, ORIGIN_SAG } from './origin.ts'
 export type { OriginState } from './origin.ts'
 
 export { shouldRaiseCamera, PRESS_SHAKE_PASSTHROUGH } from './raise-camera.ts'

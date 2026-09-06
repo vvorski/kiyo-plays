@@ -1562,6 +1562,15 @@ async function main(): Promise<void> {
   /** The contact that has already opened the menu this gesture, so a finger
    *  still resting on the glass at 3.6s does not reopen it every frame. */
   let holdOpenedBy: number | null = null
+  /** docs/todo.md entry 141 — the contact currently holding the
+   *  centre-anchored emitter, if any. Belongs to it for its whole life, the
+   *  same exclusive-claim shape `fsBlocking` already has: no ring, no
+   *  drag-trail, no tap or double, no hold-arming the camera. */
+  let emitterDragId: number | null = null
+  /** docs/todo.md entry 141 — within this many CSS pixels of the emitter on
+   *  a `down` picks it up. Smaller than a chip (48px) so it is deliberate,
+   *  larger than the centre ring (0.02 uv, about 7px) so it is findable. */
+  const EMITTER_PICK_PX = 36
   /** The longest still contact on the glass right now, in seconds — for the
    *  `?debug` readout only. Recomputed each frame in `dispatchTouches`; 0
    *  when nothing qualifies. */
@@ -1703,6 +1712,18 @@ async function main(): Promise<void> {
       // merely "no ring". A chip contact is unaffected, exactly as Decided
       // states — the `!t.onChip` guard here is what keeps that true.
       if (!t.onChip && fsBlocking) continue
+      // docs/todo.md entry 141 — the same total exclusion entry 80's own
+      // comment above states for a fullscreen-blocked contact, for the
+      // contact currently holding the emitter: not the ring, not the
+      // atmospheric stream, not the hold-to-arm recogniser below. Its own
+      // live position is still forwarded, every frame, which is what "no
+      // lag, no spring" while held actually requires — a `down`-time
+      // position alone would leave the emitter wherever the finger first
+      // landed rather than following it.
+      if (t.id === emitterDragId) {
+        visualiser.setEmitterDrag({ x: t.x, y: t.y })
+        continue
+      }
       if (!t.onChip) nonChipDown++
       if (!t.onChip && !hudOpen) {
         streamAnyDown = true
@@ -1795,6 +1816,24 @@ async function main(): Promise<void> {
           exitCameraMode()
           continue
         }
+        // docs/todo.md entry 141 — a fifth claimant, checked here: after
+        // fullscreen and after camera mode (a tap while armed is always a
+        // photo, entirely unaffected by this), before a mouse's own
+        // left-click-arms-camera below and before an ordinary tap or drag
+        // is resolved at all. `e.x`/`e.y` are already shader-uv — every
+        // `TouchFieldEvent` carries them, the same pair `resolveTapDown`'s
+        // own caller further down reaches for by client coordinates instead
+        // only because that path needs to remember where the tap itself
+        // was, not to hit-test against anything.
+        {
+          const rect = canvas.getBoundingClientRect()
+          const radiusUv = EMITTER_PICK_PX / Math.min(rect.width, rect.height)
+          if (visualiser.hitTestEmitter(e.x, e.y, radiusUv)) {
+            emitterDragId = e.id
+            visualiser.setEmitterDrag({ x: e.x, y: e.y })
+            continue
+          }
+        }
         // docs/todo.md entry 125 deleted entry 67's two-finger opener that
         // stood here. It fired the instant the second finger landed — no
         // duration, no stillness, no travel test of any kind — and two
@@ -1829,6 +1868,18 @@ async function main(): Promise<void> {
         // equal `e.downClientX`/`e.downClientY` for a `down` event; using
         // the former reads as "where this tap is", which is what it is.
         resolveTapDown(e.id, e.clientX, e.clientY)
+        continue
+      }
+      // docs/todo.md entry 141 — up or cancel, the same one line: the claim
+      // ends and the emitter stays exactly where this contact leaves it.
+      // `setEmitterDrag(null)` is what tells scene.ts to anchor the spring
+      // there (or, with `grav` off, to simply hold the picture there) —
+      // checked first of everything below, since a dragging contact was
+      // never eligible for a tap, a double or the hold-arm gesture and has
+      // nothing there to unwind.
+      if (emitterDragId === e.id) {
+        emitterDragId = null
+        visualiser.setEmitterDrag(null)
         continue
       }
       // A cancelled contact (pointercancel, lostpointercapture) is never a

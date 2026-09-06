@@ -88,10 +88,49 @@ export interface OriginState {
   y: number
   vx: number
   vy: number
+  /** docs/todo.md entry 141 — where the spring hangs from, moved by a drag
+   *  rather than fixed at the frame centre. `(0, 0)` (its own default)
+   *  reproduces every existing calculation exactly: the target below was
+   *  simply `tilt * ORIGIN_SAG` before this entry, which is `anchor + tilt *
+   *  ORIGIN_SAG` at `anchor = (0, 0)`. */
+  anchorX: number
+  anchorY: number
 }
 
 export function createOriginState(): OriginState {
-  return { x: 0, y: 0, vx: 0, vy: 0 }
+  return { x: 0, y: 0, vx: 0, vy: 0, anchorX: 0, anchorY: 0 }
+}
+
+/**
+ * docs/todo.md entry 141 — move where the spring hangs from. Called on
+ * release, once, with wherever the finger last was: the drag itself sets
+ * `uOrigin` directly (no spring — Decided's own "no lag, no spring" while
+ * held), and this is what the spring re-anchors to once the finger lifts.
+ */
+export function setAnchor(state: OriginState, x: number, y: number): void {
+  state.anchorX = x
+  state.anchorY = y
+}
+
+/**
+ * docs/todo.md entry 141 — is `(x, y)` within `radiusUv` of the anchor?
+ * `radiusUv` is the caller's own 36px, already converted through the same
+ * `toShaderUv` scale factor a hit-test elsewhere in this codebase would use
+ * to go the other way — this function only ever compares two uv distances
+ * and knows nothing about pixels.
+ *
+ * Returns a boolean rather than folding into a larger "which emitter"
+ * function: this entry ships the single-emitter views (Circles, Shards,
+ * Grid, Rose) only, where the anchor *is* the one pickable emitter and there
+ * is nothing to disambiguate. See docs/todo.md entry 146 — Chorus's several
+ * nodes are shipped separately, once its own ripple-targeting logic can be
+ * moved off the closed-form angular fold this function does not need to
+ * reproduce.
+ */
+export function pickEmitter(state: OriginState, x: number, y: number, radiusUv: number): boolean {
+  const dx = x - state.anchorX
+  const dy = y - state.anchorY
+  return dx * dx + dy * dy <= radiusUv * radiusUv
 }
 
 /**
@@ -101,10 +140,12 @@ export function createOriginState(): OriginState {
  * unit length upright — and `kickX`/`kickY` are the tumble's own pending
  * impulses in m/s², or 0 when nothing has happened.
  *
- * The rest position is `tilt × ORIGIN_SAG`, so gravity does not accelerate the
- * bob directly: it moves the anchor the spring pulls toward. That is what
+ * The rest position is `anchor + tilt × ORIGIN_SAG`, so gravity does not
+ * accelerate the bob directly: it moves the point the spring pulls toward,
+ * relative to wherever a drag last left it (docs/todo.md entry 141's
+ * `anchorX`/`anchorY`, `(0, 0)` until something moves them). That is what
  * makes the response a swing toward a hanging point rather than a fall, and
- * what makes "flat" mean "the hanging point is the centre" rather than a case
+ * what makes "flat" mean "the hanging point is the anchor" rather than a case
  * anything tests for.
  */
 export function updateOrigin(
@@ -124,8 +165,8 @@ export function updateOrigin(
   // puts the hanging centre *below* the middle of the frame, which is what
   // "hangs" means. No sign flip is needed anywhere: the vector already points
   // the way things fall.
-  const targetX = tiltX * ORIGIN_SAG
-  const targetY = tiltY * ORIGIN_SAG
+  const targetX = state.anchorX + tiltX * ORIGIN_SAG
+  const targetY = state.anchorY + tiltY * ORIGIN_SAG
 
   state.vx += (STIFF * (targetX - state.x) - DAMP * state.vx) * dt + kickX * KICK_SCALE
   state.vy += (STIFF * (targetY - state.y) - DAMP * state.vy) * dt + kickY * KICK_SCALE
@@ -144,14 +185,19 @@ export function updateOrigin(
   }
 }
 
-/** Put the bob back at the centre, instantly — for the moment the `grav` chip
- *  is switched off, so the picture does not keep hanging off-centre with the
- *  feature disabled. The uniform stops being written at the same moment; this
- *  is what makes the *next* switch-on start from rest rather than from
- *  wherever it was left. */
+/** Put the bob back at rest exactly on the anchor, instantly — for the
+ *  moment the `grav` chip is switched off, so the picture does not keep
+ *  hanging off-anchor with the feature disabled. The uniform stops being
+ *  written at the same moment (the caller sets it to the anchor directly
+ *  instead — see scene.ts); this is what makes the *next* switch-on start
+ *  from rest rather than from wherever the swing was left.
+ *
+ *  docs/todo.md entry 141 — settles at `anchorX`/`anchorY` rather than the
+ *  hardcoded `(0, 0)` this reset to before that entry, which is the same
+ *  value whenever nothing has ever dragged the anchor away from there. */
 export function resetOrigin(state: OriginState): void {
-  state.x = 0
-  state.y = 0
+  state.x = state.anchorX
+  state.y = state.anchorY
   state.vx = 0
   state.vy = 0
 }

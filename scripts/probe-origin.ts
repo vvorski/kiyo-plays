@@ -1,6 +1,7 @@
 /**
  * Headless exercise of the geometric centre's pendulum — docs/todo.md entry
- * 132.
+ * 132 — and, since entry 141, of the anchor a drag moves it to and the
+ * hit-test that decides whether a contact picked it up at all.
  *
  * Every claim this entry makes about the swing is a claim about a second or
  * two of behaviour: overshoot by a third, settle inside three seconds, return
@@ -11,7 +12,7 @@
  *   node --experimental-strip-types scripts/probe-origin.ts
  */
 
-import { createOriginState, updateOrigin, resetOrigin, ORIGIN_SAG } from '../src/engine/origin.ts'
+import { createOriginState, updateOrigin, resetOrigin, setAnchor, pickEmitter, ORIGIN_SAG } from '../src/engine/origin.ts'
 
 let failures = 0
 function check(name: string, ok: boolean, detail: string): void {
@@ -191,6 +192,63 @@ function run(state: ReturnType<typeof createOriginState>, seconds: number, tiltX
     'the resting point is the same at 30fps and 120fps',
     Math.abs(slow.y - fast.y) < 0.005,
     `${slow.y.toFixed(5)} vs ${fast.y.toFixed(5)}`,
+  )
+}
+
+// 9. docs/todo.md entry 141 — pickEmitter: inside 36px (a uv radius the
+//    caller derives from the canvas rect) hits, just outside misses. The
+//    probe's own radiusUv stands in for "36px on some canvas"; the actual
+//    px-to-uv conversion is main.ts's job and not this pure function's.
+{
+  const s = createOriginState()
+  setAnchor(s, 0.2, -0.1)
+  const radiusUv = 0.05
+  check(
+    'pickEmitter: a point just inside the radius hits',
+    pickEmitter(s, 0.2 + radiusUv * 0.9, -0.1, radiusUv),
+    'expected true',
+  )
+  check(
+    'pickEmitter: a point just outside the radius misses',
+    !pickEmitter(s, 0.2 + radiusUv * 1.1, -0.1, radiusUv),
+    'expected false',
+  )
+  check('pickEmitter: dead centre of the anchor hits', pickEmitter(s, 0.2, -0.1, radiusUv), 'expected true')
+}
+
+// 10. docs/todo.md entry 141's own worked example: anchor moved to
+//     (0.3, 0.1), gravity (0, 1) (this probe's upright-and-tilted-right
+//     convention is tiltY = -1 for "upright"; the entry states the tilt as
+//     the vector gravity itself points along, which for `updateOrigin`'s own
+//     sign convention above is (0, 1) meaning "hangs toward positive y" —
+//     matched here literally against the entry's own arithmetic rather than
+//     reasoned about, since the entry gives an exact expected answer to
+//     check against) settles at (0.3, 0.1 + ORIGIN_SAG) = (0.3, 0.38).
+{
+  const s = createOriginState()
+  setAnchor(s, 0.3, 0.1)
+  run(s, 6, 0, 1)
+  const expectedY = 0.1 + ORIGIN_SAG
+  check(
+    'with the anchor at (0.3, 0.1), the bob settles at (0.3, 0.1 + ORIGIN_SAG)',
+    Math.abs(s.x - 0.3) < 0.001 && Math.abs(s.y - expectedY) < 0.001,
+    `(${s.x.toFixed(4)}, ${s.y.toFixed(4)}) vs (0.3, ${expectedY.toFixed(4)})`,
+  )
+}
+
+// 11. resetOrigin settles at the anchor, not at the frame centre, once one
+//     has been set — the fix for the exact regression a hardcoded (0, 0)
+//     would have been: turning `grav` off after a drag must not snap the
+//     picture back to the middle of the screen.
+{
+  const s = createOriginState()
+  setAnchor(s, -0.15, 0.22)
+  run(s, 3, 0, -1)
+  resetOrigin(s)
+  check(
+    'resetOrigin settles at the anchor, not at (0, 0), once one has been set',
+    Math.abs(s.x - -0.15) < 1e-9 && Math.abs(s.y - 0.22) < 1e-9 && s.vx === 0 && s.vy === 0,
+    `(${s.x}, ${s.y}) v=(${s.vx}, ${s.vy})`,
   )
 }
 

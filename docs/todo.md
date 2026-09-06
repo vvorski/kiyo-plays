@@ -3876,7 +3876,7 @@ rather than imported, for exactly this reason.
 
 
 ### 138. Umbra — the first view that subtracts light instead of adding it
-`status: ready` · added 2026-09-05 · a new atmospheric view · independent of 139 and 140, and of 110
+`status: building` · started 2026-09-06 · added 2026-09-05 · a new atmospheric view · independent of 139 and 140, and of 110
 
 **Do** — add an atmospheric view, **Umbra**: one bright source behind a drift
 of solid, opaque bodies, seen as silhouettes with lit rims and light leaking

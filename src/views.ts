@@ -18,6 +18,7 @@
  * deliberate choice from the control panel and would not be fine per frame.
  */
 
+import annealFrag from './shaders/anneal.frag.glsl?raw'
 import auroraFrag from './shaders/aurora.frag.glsl?raw'
 import causticsFrag from './shaders/caustics.frag.glsl?raw'
 import cellsFrag from './shaders/cells.frag.glsl?raw'
@@ -178,6 +179,14 @@ export const ATMOSPHERIC_VIEWS = {
     label: 'Filings',
     description: 'Iron filings over six magnetic poles the spectrum moves. A hit flips one, and the field re-routes.',
     fragmentShader: filingsFrag,
+  },
+  // docs/todo.md entry 140 — a material under load, the only view whose
+  // colour is the measurement itself rather than filtered by atmColour: the
+  // photoelastic sin² identity below is what fringe order actually is.
+  anneal: {
+    label: 'Anneal',
+    description: 'Glass under load between crossed polarisers. Coloured fringes, dark brushes, a hammer blow.',
+    fragmentShader: annealFrag,
   },
 } satisfies Record<string, View>
 

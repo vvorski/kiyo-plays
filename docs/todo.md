@@ -4057,7 +4057,8 @@ the atmospheric band at **320×568 and 360×640**.
 (`?atmospheric=filings`) · capture no · dependency no.
 
 ### 140. Anneal — glass under load, seen through crossed polarisers
-`status: building` · started 2026-09-06 · added 2026-09-05 · a new atmospheric view · independent of 138 and 139, and of 110
+`status: done` · added 2026-09-05 · build 482 · a new atmospheric view ·
+independent of 138 and 139, and of 110
 
 **Do** — add an atmospheric view, **Anneal**: a sheet of stressed glass between
 crossed polarisers, showing the oily rainbow fringes of photoelasticity and the

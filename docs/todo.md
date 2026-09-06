@@ -4653,14 +4653,21 @@ via `gh api`.
 **Blocked on GitHub's certificate issuance.** `https://kiyo.flyflyfly.tv/`
 serves 200 over plain HTTP and the app is genuinely live there (byte-identical
 `Content-Length` to the real bundle), but HTTPS still answers with GitHub's
-generic `*.github.io` certificate rather than one naming this host — over 20
-minutes after the CNAME and custom domain were both set, longer than GitHub's
-usual turnaround. `https_enforced` is still `false` in the Pages API. Not
-something this loop can hurry along; it will be checked again on a later tick
-rather than blocked on synchronously. **Do not tick "Enforce HTTPS" or
-consider Done-when 5 met until the certificate itself names `kiyo.flyflyfly.tv`
-— curl or openssl `s_client`, never `-k`, which returns 200 against the wrong
-certificate and reads as success when it is not.**
+generic `*.github.io` certificate rather than one naming this host.
+`https_enforced` is still `false` in the Pages API. **Do not tick "Enforce
+HTTPS" or consider Done-when 5 met until the certificate itself names
+`kiyo.flyflyfly.tv` — curl or openssl `s_client`, never `-k`, which returns 200
+against the wrong certificate and reads as success when it is not.**
+
+GitHub's own docs put "up to an hour" as the normal window; no `CAA` record
+exists on the zone to block issuance (checked via the API, not assumed).
+Passed that hour with no change, so applied the documented remedy — cleared
+`cname` on the Pages config via `gh api`, confirmed it read back `null`, then
+set it back to `kiyo.flyflyfly.tv` — which re-triggers provisioning and resets
+the clock. If a second hour passes with no certificate, that is a real fault
+rather than ordinary latency and the next tick should stop retrying blindly
+and investigate GitHub's Pages status page and support, rather than
+re-triggering a third time on a hunch.
 
 Still to do: the certificate (above); Done-when 5's phone check; Done-when 6
 (the github.io → custom-domain redirect, and the query-string check);

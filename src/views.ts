@@ -28,6 +28,7 @@ import fieldFrag from './shaders/field.frag.glsl?raw'
 import fringeFrag from './shaders/fringe.frag.glsl?raw'
 import gridFrag from './shaders/grid.frag.glsl?raw'
 import latticeFrag from './shaders/lattice.frag.glsl?raw'
+import moireFrag from './shaders/moire.frag.glsl?raw'
 import orbitsFrag from './shaders/orbits.frag.glsl?raw'
 import roseFrag from './shaders/rose.frag.glsl?raw'
 import shardsFrag from './shaders/shards.frag.glsl?raw'
@@ -105,6 +106,15 @@ export const GEOMETRIC_VIEWS = {
     label: 'Orbits',
     description: 'Small bodies on Kepler orbits round the centre. Fling one, or hold a finger for it to slingshot past.',
     fragmentShader: orbitsFrag,
+  },
+  // docs/todo.md entry 136 — same axis as Orbits (the emitter, not the
+  // mark), but explored through two of them at once: a second field of
+  // rings whose centre a held finger simply becomes, so what moves is the
+  // whole interference pattern between the two fields rather than one body.
+  moire: {
+    label: 'Moiré',
+    description: 'Two fields of hairline rings beat together. Hold to move the second centre; let go and it springs back.',
+    fragmentShader: moireFrag,
   },
 } satisfies Record<string, View>
 

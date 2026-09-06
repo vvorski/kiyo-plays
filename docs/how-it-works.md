@@ -3,7 +3,7 @@
 A microphone-driven WebGL field, built for a phone held in the hand rather than
 a browser window on a desk.
 
-**Live:** [vvorski.github.io/kiyo-plays](https://vvorski.github.io/kiyo-plays/)
+**Live:** [kiyo.flyflyfly.tv](https://kiyo.flyflyfly.tv/)
 
 Served over HTTPS, which the microphone requires as a secure-context
 permission.
@@ -591,6 +591,13 @@ reclaim contexts routinely when a tab is backgrounded.
 configuration at all beyond the repo being public — no token, no account, no
 dashboard.
 
-`BASE_PATH` is supplied by `actions/configure-pages`, which resolves it to
-`/<repo>/`; `vite.config.ts` defaults to `/`, which is what `pnpm dev` and
-`vite preview` need.
+The custom domain `kiyo.flyflyfly.tv` comes from `public/CNAME`, which Vite
+copies verbatim into `dist/` — the file has to be in the published artifact or
+a later deploy can clear the domain from the repo's Pages settings. DNS for
+that name lives at Cloudflare, as a `CNAME` to `vvorski.github.io`, DNS-only
+(not proxied) so GitHub can see the certificate challenge — Cloudflare is a
+nameserver here, never a host.
+
+`actions/configure-pages` resolves `BASE_PATH` to `/` once a custom domain is
+set; `vite.config.ts` already defaults there, which is also what `pnpm dev`
+and `vite preview` need.

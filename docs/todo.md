@@ -4637,10 +4637,35 @@ not
    confirms third-party nameservers. **The `.tv` registry still delegated to
    Hover at the time of writing** — propagation pending, nothing broken.
 
-Still to do: the registry delegation completing and the Cloudflare zone going
-`active`; the `kiyo` `CNAME`, deliberately held until GitHub Pages is
-configured, since pointing it at `vvorski.github.io` before then just serves a
-404; and the whole GitHub Pages half of this entry.
+**Progress, 2026-09-06.** Registry delegation completed on its own — the zone
+reads `active` in the Cloudflare API, and public resolvers (1.1.1.1, 8.8.8.8,
+9.9.9.9) all return the Cloudflare nameservers. Confirmed live: `http://
+flyflyfly.tv/` and `http://www.flyflyfly.tv/` both 200 (Done-when 3), `MX` and
+`mail.flyflyfly.tv` resolve exactly as before the move (the `MX`/mail-delivery
+half of Done-when 2 could not be tested from here — no email-sending tool
+available; the DNS side of it is confirmed correct). All four scanned records
+verified byte-identical to the table above via the API, `proxied: false` on
+every one. Added the fifth: `CNAME kiyo → vvorski.github.io`, DNS-only,
+confirmed via the API rather than the dashboard's colour (Done-when 4). Set
+`public/CNAME` and the custom domain in the `kiyo-plays` repo's Pages settings
+via `gh api`.
+
+**Blocked on GitHub's certificate issuance.** `https://kiyo.flyflyfly.tv/`
+serves 200 over plain HTTP and the app is genuinely live there (byte-identical
+`Content-Length` to the real bundle), but HTTPS still answers with GitHub's
+generic `*.github.io` certificate rather than one naming this host — over 20
+minutes after the CNAME and custom domain were both set, longer than GitHub's
+usual turnaround. `https_enforced` is still `false` in the Pages API. Not
+something this loop can hurry along; it will be checked again on a later tick
+rather than blocked on synchronously. **Do not tick "Enforce HTTPS" or
+consider Done-when 5 met until the certificate itself names `kiyo.flyflyfly.tv`
+— curl or openssl `s_client`, never `-k`, which returns 200 against the wrong
+certificate and reads as success when it is not.**
+
+Still to do: the certificate (above); Done-when 5's phone check; Done-when 6
+(the github.io → custom-domain redirect, and the query-string check);
+Done-when 7 (`public/CNAME` survives a redeploy); the real-mail-delivery half
+of Done-when 2.
 
 **Do** — move `flyflyfly.tv`'s DNS to Cloudflare, point `kiyo.flyflyfly.tv` at
 GitHub Pages, and make it the address the app is served from.

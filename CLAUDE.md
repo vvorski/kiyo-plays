@@ -240,13 +240,16 @@ Read a few files before writing any.
 - **Mobile is the target.** Bundle size and fill rate matter; a desktop-only
   regression is a regression. Nothing needing COOP/COEP headers can ever work,
   because GitHub Pages cannot set them — that rules out `SharedArrayBuffer`.
-- **GitHub Pages is the deploy, and the only one** —
-  `vvorski.github.io/kiyo-plays`, *not* the org account. It builds from
-  `main` only: the `github-pages` environment has a branch rule, so a
-  `workflow_dispatch` on any other ref builds happily and is then refused at
-  the deploy step. Merge first. Do not delete `checks.yml` to tidy up —
-  `pages.yml` runs `pnpm build` but never `pnpm lint`, so `checks.yml` is the
-  lint gate.
+- **GitHub Pages is the deploy, and the only one** — served at the custom
+  domain `kiyo.flyflyfly.tv` (`public/CNAME`), not `vvorski.github.io/
+  kiyo-plays` and not the org account. It builds from `main` only: the
+  `github-pages` environment has a branch rule, so a `workflow_dispatch` on
+  any other ref builds happily and is then refused at the deploy step. Merge
+  first. Do not delete `checks.yml` to tidy up — `pages.yml` runs `pnpm build`
+  but never `pnpm lint`, so `checks.yml` is the lint gate. **Cloudflare is DNS
+  here and never a host** — `flyflyfly.tv`'s nameservers point at Cloudflare
+  for the `kiyo` record alone, DNS-only. `wrangler`, Pages, and the deploy
+  script this project once had are gone and do not come back.
 
 ## Hard stops
 

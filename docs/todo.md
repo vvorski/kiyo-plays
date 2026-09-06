@@ -4904,3 +4904,105 @@ parameter changes; the origin moves and every parameter survives it · capture
 **no** — no new request, nothing recorded, and Cloudflare is a nameserver here,
 not a proxy in the path · dependency **no** — no runtime bytes; `public/CNAME`
 is 18 characters.
+
+### 146. Chorus's several emitters join the pick-up-and-move entry
+`status: ready` · added 2026-09-06 · **the follow-up entry 141 requires before
+being marked done** · extends 33, 57, and 141
+
+**Do** — extend entry 141's pick-up-and-move gesture to Chorus's several
+fixed nodes: hit-test each one, drag the nearest, and on release let it keep
+its own offset from the anchor rather than snapping back to the seeded ring.
+
+**Why** — entry 141 shipped only the single-emitter views (Circles, Shards,
+Grid, Rose), where the one pickable emitter *is* the anchor and there is
+nothing to disambiguate. Chorus has three to seven, and picking one of them up
+needs to know *which*, which the single-anchor `pickEmitter` built for 141
+cannot answer — Victor's own request named Chorus specifically ("Chorus has
+three to seven, its nodes"), so this is the outstanding third of it, not a
+nice-to-have.
+
+**Recon — why this split, in the builder's own words, verbatim from entry
+141's build note:** *"chorus.frag.glsl's node-drawing exploits the PERFECT
+rotational symmetry of evenly-spaced nodes via angular folding — a closed-form
+trick, not a loop (`mod(atan(rel.y, rel.x) - phase + sector*0.5, sector) -
+sector*0.5`, chorus.frag.glsl's own `folded` line, plus the ripple-targeting
+`which` calculation a few lines above it, which finds 'the nearest node to a
+touch' the same closed-form way). The moment one node can be dragged off its
+seeded angle, the ring is no longer evenly spaced, and both closed forms stop
+being correct — not slightly wrong, categorically: the fold assumes a spacing
+that no longer holds. Both become real per-node loops (up to seven `length()`
+calls each, where today's shader does zero for either job), which is a
+measured, non-trivial fill-rate change on the phone this project targets, not
+a data-shape change like the single-anchor case was. Building it inside 141's
+own pass would have meant shipping unverified GPU-cost and correctness
+changes to a shader nobody asked to be touched, in the same commit as a
+different, independently-shippable gesture. Building the anchor case alone
+and disclosing this is what CLAUDE.md's own 'ship only the part you are
+confident in' asks for."* That reasoning is accepted here rather than
+re-litigated; this entry exists to do the part that was set aside, not to
+second-guess declining to rush it.
+
+**Decided**
+- **`uNodes[8]`/`uNodeCount`, computed once in TypeScript from `uSeed`** →
+  entry 141's own Lands-in already specifies this, unchanged: one source for
+  the arrangement, so the hit-test and the picture cannot disagree. `scene.ts`
+  computes `nodes = 3 + floor(seed.x * 5)`, `sector = TAU / nodes`, `phase =
+  seed.z * TAU`, `offset_i = NODE_RADIUS * vec2(cos(phase + i*sector), sin(...))`
+  — chorus.frag.glsl's own removed lines, moved verbatim with their comment
+  intact, on every construction and every re-roll (the same two call sites
+  entry 141's Lands-in named: scene.ts's construction and its structural
+  boundary).
+- **A dragged node's offset persists independently of the others** → moving
+  one does not re-space the rest; a re-roll resets all of them together
+  (entry 141's own "persistence: render-time state only... a re-roll also
+  resets them"). **Mine**, inherited from 141's own Decided, unchanged by the
+  split.
+- **The ripple-targeting `which` calculation becomes a real loop** → for each
+  ripple, find the nearest of `uNodeCount` absolute node positions
+  (`uOrigin + uNodes[i]`) by distance, replacing the closed-form angular
+  fold. **Mine**: there is no way to keep the closed form once positions are
+  not evenly spaced, and Decided above already accepts the cost.
+- **The node-dot drawing becomes a real loop too** → `min` over `length(uv -
+  (uOrigin + uNodes[i]))` for `i < uNodeCount`, replacing the `folded`/
+  `dNode` law-of-cosines shortcut. **Mine**, same reasoning.
+- **The fill-rate cost is measured, not assumed** → this entry's own Verify
+  requires a frame-time comparison against the build before it, on a phone,
+  specifically because entry 141's recon flagged this as the reason not to
+  build it blind.
+
+**Lands in**
+- `src/engine/origin.ts` — `nodes: {x, y}[]` alongside the existing anchor;
+  `pickEmitter` gains an overload or a second exported function for "nearest
+  of several", since the single-anchor version entry 141 shipped returns a
+  boolean, not an index, and both call shapes are needed once Chorus is in
+  scope.
+- `src/scene.ts` — node placement computed from `uSeed`, `uNodes`/
+  `uNodeCount` in the shared uniforms, `setEmitterDrag` extended to address a
+  node index as well as the anchor.
+- `src/shaders/chorus.frag.glsl:97-181` (recount at build time — entry 141's
+  own line numbers had already drifted from recon by the time it landed) —
+  read `uNodes`/`uNodeCount`; both closed-form calculations become loops; the
+  seed-to-ring formula's own comment moves to `scene.ts` with it, intact.
+- `src/main.ts` — the hit-test in `dispatchTouches` extended to try every
+  node when the active geometric view is Chorus, not only the anchor.
+- `scripts/probe-origin.ts` — cases for the multi-node hit-test (nearest of
+  two, one dragged leaves the others in place, a re-roll resets all of them
+  together).
+
+**Done when** — headless: dragging node `i` moves only `uNodes[i]`; a re-roll
+resets every node to its seeded offset regardless of what was dragged; the
+nearest-node hit-test returns the correct index when two nodes are close
+together. Probe page, on Chorus: dragging one node moves only that node
+on screen; a re-roll puts all back; a touch ripple still fires from the
+nearest node by eye. On a phone: frame time with Chorus active and a drag in
+progress is measured against the same scene on the build immediately before
+this entry — if it has regressed enough to matter, that is this entry's own
+finding to report, not something to discover later from a bug report.
+
+**Verify** — `pnpm build`, `pnpm lint`, `pnpm probe:origin`, `pnpm probe:tap`,
+`pnpm probe:emitter` unchanged; the probe page with Chorus and Circles side by
+side (Circles must still be byte-identical to entry 141 — nothing about its
+own single-anchor path changes here); then the phone, specifically for frame
+time as Done-when requires. No HUD surface changes.
+
+**Hard stops** — prefs no · url no · capture no · dependency no.

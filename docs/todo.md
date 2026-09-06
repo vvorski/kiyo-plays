@@ -4616,11 +4616,11 @@ entry reaches a rendered surface, a shader, the HUD or the gate.
 6.8 MB out of `node_modules`, zero runtime bytes either way.
 
 ### 145. kiyo.flyflyfly.tv
-`status: building` · started 2026-09-06 · added 2026-09-05 · **build after 144, then 142** — 144 purges
-Cloudflare as a *host*, 142 renames the repo, and this one brings Cloudflare
-back as *DNS only*; in any other order the three fight over the same doc lines ·
-**the DNS half is already executed — see Progress** · the GitHub Pages half is
-not
+`status: done` · added 2026-09-05 · build 471 · **the mail-delivery half of
+Done-when 2 is unverified — no email-sending tool was available in this
+session; the DNS side of it (MX, A record) is confirmed correct** · build
+after 144, then 142 — 144 purges Cloudflare as a *host*, 142 renames the repo,
+and this one brings Cloudflare back as *DNS only*
 
 **Progress, 2026-09-05.** Done, in this order, and verified at each step:
 1. Zone `flyflyfly.tv` created in "Victors Sites"
@@ -4669,10 +4669,31 @@ rather than ordinary latency and the next tick should stop retrying blindly
 and investigate GitHub's Pages status page and support, rather than
 re-triggering a third time on a hunch.
 
-Still to do: the certificate (above); Done-when 5's phone check; Done-when 6
-(the github.io → custom-domain redirect, and the query-string check);
-Done-when 7 (`public/CNAME` survives a redeploy); the real-mail-delivery half
-of Done-when 2.
+**Progress, 2026-09-06 (closing).** The re-trigger worked — the certificate
+came back `state: approved`, `domains: ["kiyo.flyflyfly.tv"]`, `CN=
+kiyo.flyflyfly.tv` confirmed by `openssl s_client` (not `-k`). `https_enforced`
+set `true` via `gh api` (needs `-F`, not `-f` — the REST API's boolean field
+rejects the string `"true"` that `-f` sends). Total time from setting the
+custom domain to an approved certificate: a little over an hour, inside the
+retrigger, matching GitHub's documented window once counted from the second
+attempt.
+
+Verified after that: `http://kiyo.flyflyfly.tv/` redirects 301 to `https://`;
+`https://vvorski.github.io/kiyo-plays/` redirects 301 straight to the custom
+domain (Done-when 6's first half); in a real browser,
+`…/kiyo-plays/?geometric=shards&mix=screen` lands on
+`kiyo.flyflyfly.tv/?geometric=shards&mix=screen` with both parameters intact,
+Shards actually rendering on screen blend, and the QR code and share sheet
+already pointing at the new origin with no code change — `share.ts` reads
+`location.origin` at runtime. The gate at 320×568 (iframe technique, live URL)
+wraps and fits cleanly — wordmark, byline, button and QR code, no overlap.
+`public/CNAME` confirmed surviving a redeploy from the prior tick's push.
+
+Not verified: real mail delivery through the migrated `MX` (Done-when 2's
+harder half) — no email-sending tool was available in this session. The DNS
+side is confirmed correct (`MX`, `A mail` both match Hover's original values
+exactly), which is the strongest check available here; an actual send-and-
+receive is left for whoever next has a mailbox at the domain to hand.
 
 **Do** — move `flyflyfly.tv`'s DNS to Cloudflare, point `kiyo.flyflyfly.tv` at
 GitHub Pages, and make it the address the app is served from.

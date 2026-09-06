@@ -3636,7 +3636,7 @@ slot absent. On a phone: fling, then hold a finger in a body's path.
 **Verify** — as 134's. **Hard stops** — as 134's.
 
 ### 136. Moiré: two ring fields, and the finger holds the second centre
-`status: ready` · added 2026-09-05 · new geometric view, circles · independent of 134 and 135
+`status: building` · started 2026-09-06 · added 2026-09-05 · new geometric view, circles · independent of 134 and 135
 
 **Do** — a geometric view made of two dense fields of concentric hairline
 circles whose centres differ, so the frame is an interference pattern; a hit

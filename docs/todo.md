@@ -3728,7 +3728,7 @@ let go, tap somewhere else.
 
 
 ### 137. Every release opens on its own seed, and the seed becomes writable
-`status: ready` · added 2026-09-05 · independent of the rest of the queue
+`status: building` · started 2026-09-06 · added 2026-09-05 · independent of the rest of the queue
 
 **Do** — derive the opening `uSeed` from `RELEASE_NAME` instead of
 `Math.random()`, add a `?seed=` parameter that restores it, and print the whole

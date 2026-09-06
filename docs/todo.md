@@ -3876,7 +3876,9 @@ rather than imported, for exactly this reason.
 
 
 ### 138. Umbra — the first view that subtracts light instead of adding it
-`status: building` · started 2026-09-06 · added 2026-09-05 · a new atmospheric view · independent of 139 and 140, and of 110
+`status: done` · added 2026-09-05 · build 478 · **corrects its own Decided's
+"draw luminance only" — see Decided, corrected at build time** · a new
+atmospheric view · independent of 139 and 140, and of 110
 
 **Do** — add an atmospheric view, **Umbra**: one bright source behind a drift
 of solid, opaque bodies, seen as silhouettes with lit rims and light leaking
@@ -3920,9 +3922,18 @@ one.
   bass note is indistinguishable from a crash, and this is the same ceiling
   argument `shake.ts`'s `MAX_ANGLE` and entry 32's refusal of whole-frame scale
   both make.
-- **Colour comes from the layer filter, as everywhere else** → the shader
-  draws luminance only. **Mine**, matching `views.ts`'s own contract and every
-  geometric shader's stated habit.
+- ~~**Colour comes from the layer filter, as everywhere else** → the shader
+  draws luminance only.~~ **Corrected at build time.** This bullet conflated
+  the two layers' contracts: `lattice.frag.glsl:16`'s "everything is
+  additive... only emission" is the *geometric* layer's rule, filtered to
+  colour downstream. Every atmospheric sibling — `caustics`, `aurora`,
+  `field`, `cells`, `fringe` — draws its own full RGB and gets `atmColour`
+  multiplied on top at composite as an additional tint (`composite.frag.glsl:
+  217/220`, `uAtmColour`), same as this one now does. A luminance-only
+  silhouette of a white light is a grey disc, not a shadow — drawing it as
+  Decided originally specified would have had no eclipse to speak of. **Mine**
+  to correct, since it is not a taste question: every existing atmospheric
+  shader already settles which contract this layer follows.
 
 **Identity when off** — a new view changes nothing until it is chosen; the
 other seven and both defaults are untouched. Within the view, silence still
@@ -4007,6 +4018,11 @@ pole flips.
   filings photograph shows the field, not the magnet, and drawing the source
   would turn a field into a diagram — which is Spectrogram's claimed principle.
 - **Colour comes from the layer filter** → luminance only, as everywhere else.
+  **Flagged, not yet corrected**: entry 138 shipped with this identical
+  bullet and found it wrong — every atmospheric shader (`caustics`, `aurora`,
+  `field`, `cells`, `fringe`) draws its own full RGB, filtered by `atmColour`
+  as a tint on top, not luminance-only the way the *geometric* layer's
+  contract works (`lattice.frag.glsl:16`). Check before building this one.
 
 **Identity when off** — a new view, so nothing existing changes. In silence the
 six poles sit at their drift positions with near-equal weak strengths and the

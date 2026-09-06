@@ -35,6 +35,7 @@ import shardsFrag from './shaders/shards.frag.glsl?raw'
 import spectrogramFrag from './shaders/spectrogram.frag.glsl?raw'
 import stringsFrag from './shaders/strings.frag.glsl?raw'
 import tideFrag from './shaders/tide.frag.glsl?raw'
+import umbraFrag from './shaders/umbra.frag.glsl?raw'
 
 export interface View {
   readonly label: string
@@ -158,6 +159,16 @@ export const ATMOSPHERIC_VIEWS = {
     label: 'Cells',
     description: 'The frame divided. Each cell lit by its own slice of the spectrum.',
     fragmentShader: cellsFrag,
+  },
+  // docs/todo.md entry 138 — an eighth principle none of the seven above
+  // use: occlusion. One light, a drift of solid bodies between it and the
+  // frame, and a lit rim where each body's edge faces the source. Every
+  // other view here is additive; this is the first thing that casts a
+  // shadow.
+  umbra: {
+    label: 'Umbra',
+    description: 'A light behind a drift of solid bodies. Silhouettes, lit rims, and gaps the light leaks through.',
+    fragmentShader: umbraFrag,
   },
 } satisfies Record<string, View>
 

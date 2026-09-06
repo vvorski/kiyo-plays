@@ -3973,7 +3973,7 @@ and Rose were) · url no (`?atmospheric=umbra` is a new value, not a new
 parameter) · capture no · dependency no.
 
 ### 139. Filings — a field with poles, and the music moves them
-`status: ready` · added 2026-09-05 · a new atmospheric view · independent of 138 and 140, and of 110
+`status: building` · started 2026-09-06 · added 2026-09-05 · a new atmospheric view · independent of 138 and 140, and of 110
 
 **Do** — add an atmospheric view, **Filings**: iron filings on glass over a
 handful of magnetic poles, drawn as the curved field lines that run between

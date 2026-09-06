@@ -4909,7 +4909,7 @@ not a proxy in the path · dependency **no** — no runtime bytes; `public/CNAME
 is 18 characters.
 
 ### 146. Chorus's several emitters join the pick-up-and-move entry
-`status: ready` · added 2026-09-06 · **the follow-up entry 141 requires before
+`status: building` · started 2026-09-06 · added 2026-09-06 · **the follow-up entry 141 requires before
 being marked done** · extends 33, 57, and 141
 
 **Do** — extend entry 141's pick-up-and-move gesture to Chorus's several

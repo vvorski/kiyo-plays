@@ -1571,6 +1571,13 @@ async function main(): Promise<void> {
    *  a `down` picks it up. Smaller than a chip (48px) so it is deliberate,
    *  larger than the centre ring (0.02 uv, about 7px) so it is findable. */
   const EMITTER_PICK_PX = 36
+  /** docs/todo.md entry 146 — which Chorus node `emitterDragId` is holding,
+   *  when it is Chorus's several nodes rather than the single anchor:
+   *  `null` for every other view and for the anchor itself. One shared
+   *  claim variable (`emitterDragId`) plus this index is simpler than a
+   *  second parallel `Map`, because at most one contact-to-drag claim is
+   *  ever open per contact and `emitterDragId` already tracks that. */
+  let emitterDragNodeIndex: number | null = null
   /** The longest still contact on the glass right now, in seconds — for the
    *  `?debug` readout only. Recomputed each frame in `dispatchTouches`; 0
    *  when nothing qualifies. */
@@ -1721,7 +1728,11 @@ async function main(): Promise<void> {
       // position alone would leave the emitter wherever the finger first
       // landed rather than following it.
       if (t.id === emitterDragId) {
-        visualiser.setEmitterDrag({ x: t.x, y: t.y })
+        if (emitterDragNodeIndex !== null) {
+          visualiser.setChorusNodeDrag(emitterDragNodeIndex, { x: t.x, y: t.y })
+        } else {
+          visualiser.setEmitterDrag({ x: t.x, y: t.y })
+        }
         continue
       }
       if (!t.onChip) nonChipDown++
@@ -1830,7 +1841,24 @@ async function main(): Promise<void> {
           const radiusUv = EMITTER_PICK_PX / Math.min(rect.width, rect.height)
           if (visualiser.hitTestEmitter(e.x, e.y, radiusUv)) {
             emitterDragId = e.id
+            emitterDragNodeIndex = null
             visualiser.setEmitterDrag({ x: e.x, y: e.y })
+            continue
+          }
+          // docs/todo.md entry 146 — the same claim, for whichever of
+          // Chorus's several nodes (if any) the touch landed on. Checked
+          // second, after the anchor itself: `hitTestEmitter` is not gated
+          // on the mounted view, so a touch within `radiusUv` of the centre
+          // still moves the whole constellation (same as gravity's own bob
+          // does), and only a touch nearer to one particular node than to
+          // the centre falls through to claim that node instead.
+          // `hitTestChorusNode` itself answers `null` whenever Chorus is not
+          // the mounted geometric view, so this is a no-op everywhere else.
+          const nodeIndex = visualiser.hitTestChorusNode(e.x, e.y, radiusUv)
+          if (nodeIndex !== null) {
+            emitterDragId = e.id
+            emitterDragNodeIndex = nodeIndex
+            visualiser.setChorusNodeDrag(nodeIndex, { x: e.x, y: e.y })
             continue
           }
         }
@@ -1879,7 +1907,12 @@ async function main(): Promise<void> {
       // nothing there to unwind.
       if (emitterDragId === e.id) {
         emitterDragId = null
-        visualiser.setEmitterDrag(null)
+        if (emitterDragNodeIndex !== null) {
+          visualiser.setChorusNodeDrag(emitterDragNodeIndex, null)
+          emitterDragNodeIndex = null
+        } else {
+          visualiser.setEmitterDrag(null)
+        }
         continue
       }
       // A cancelled contact (pointercancel, lostpointercapture) is never a

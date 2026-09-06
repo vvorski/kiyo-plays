@@ -120,17 +120,79 @@ export function setAnchor(state: OriginState, x: number, y: number): void {
  * and knows nothing about pixels.
  *
  * Returns a boolean rather than folding into a larger "which emitter"
- * function: this entry ships the single-emitter views (Circles, Shards,
- * Grid, Rose) only, where the anchor *is* the one pickable emitter and there
- * is nothing to disambiguate. See docs/todo.md entry 146 — Chorus's several
- * nodes are shipped separately, once its own ripple-targeting logic can be
- * moved off the closed-form angular fold this function does not need to
- * reproduce.
+ * function: this is the single-emitter views' own hit-test (Circles, Shards,
+ * Grid, Rose), where the anchor *is* the one pickable emitter and there is
+ * nothing to disambiguate. `pickNode` below is entry 146's separate function
+ * for Chorus's several.
  */
 export function pickEmitter(state: OriginState, x: number, y: number, radiusUv: number): boolean {
   const dx = x - state.anchorX
   const dy = y - state.anchorY
   return dx * dx + dy * dy <= radiusUv * radiusUv
+}
+
+/**
+ * docs/todo.md entry 146 — Chorus's several nodes, each an *offset* from the
+ * anchor (so the whole constellation still moves with 132's bob, per entry
+ * 141's own Decided — "the whole node ring hangs with the geometric
+ * centre"). `nodes` is whatever length the current seed's node count is (3
+ * to 7 — see `chorusNodeOffsets` below), never the full 8-slot uniform array
+ * padding scene.ts uploads.
+ *
+ * Returns the *nearest* node within `radiusUv`, not merely the first one
+ * found — two nodes can be close enough together for their pick radii to
+ * overlap, and "whichever the finger meant" is answered by proximity, not by
+ * array order.
+ */
+export function pickNode(
+  nodes: readonly { x: number; y: number }[],
+  anchor: { x: number; y: number },
+  x: number,
+  y: number,
+  radiusUv: number,
+): number | null {
+  let nearest: number | null = null
+  let nearestDist2 = radiusUv * radiusUv
+  for (let i = 0; i < nodes.length; i++) {
+    const dx = x - (anchor.x + nodes[i].x)
+    const dy = y - (anchor.y + nodes[i].y)
+    const dist2 = dx * dx + dy * dy
+    if (dist2 <= nearestDist2) {
+      nearest = i
+      nearestDist2 = dist2
+    }
+  }
+  return nearest
+}
+
+const TAU = 2 * Math.PI
+
+/**
+ * docs/todo.md entry 146 — Chorus's seeded ring, moved here verbatim from
+ * `chorus.frag.glsl`'s own removed lines (comment intact): node count and
+ * rotation are both seed choices, so a re-roll restructures the arrangement
+ * rather than only re-timing it. Three is the fewest that still reads as an
+ * arrangement rather than as two points and an axis; the ceiling is the
+ * ripple buffer's own limit (only eight rings can be alive at once), not the
+ * geometry — past seven nodes a run of hits mostly lights each node once and
+ * nothing meets a neighbour's front.
+ *
+ * Returns *offsets* from the anchor, in the same uv units as everything
+ * else — `NODE_RADIUS` is chorus.frag.glsl's own removed constant, moved
+ * here for the one place it is still needed.
+ */
+const NODE_RADIUS = 0.3
+
+export function chorusNodeOffsets(seed: readonly [number, number, number, number]): { x: number; y: number }[] {
+  const count = 3 + Math.floor(seed[0] * 5)
+  const sector = TAU / count
+  const phase = seed[2] * TAU
+  const offsets: { x: number; y: number }[] = []
+  for (let i = 0; i < count; i++) {
+    const a = phase + i * sector
+    offsets.push({ x: NODE_RADIUS * Math.cos(a), y: NODE_RADIUS * Math.sin(a) })
+  }
+  return offsets
 }
 
 /**

@@ -1,7 +1,9 @@
 /**
  * Headless exercise of the geometric centre's pendulum — docs/todo.md entry
- * 132 — and, since entry 141, of the anchor a drag moves it to and the
- * hit-test that decides whether a contact picked it up at all.
+ * 132 — of the anchor a drag moves it to and the hit-test that decides
+ * whether a contact picked it up at all (entry 141), and since entry 146, of
+ * Chorus's own several nodes: the offsets a seed opens with and the
+ * nearest-node hit-test a drag needs to disambiguate between them.
  *
  * Every claim this entry makes about the swing is a claim about a second or
  * two of behaviour: overshoot by a third, settle inside three seconds, return
@@ -12,7 +14,16 @@
  *   node --experimental-strip-types scripts/probe-origin.ts
  */
 
-import { createOriginState, updateOrigin, resetOrigin, setAnchor, pickEmitter, ORIGIN_SAG } from '../src/engine/origin.ts'
+import {
+  createOriginState,
+  updateOrigin,
+  resetOrigin,
+  setAnchor,
+  pickEmitter,
+  pickNode,
+  chorusNodeOffsets,
+  ORIGIN_SAG,
+} from '../src/engine/origin.ts'
 
 let failures = 0
 function check(name: string, ok: boolean, detail: string): void {
@@ -249,6 +260,86 @@ function run(state: ReturnType<typeof createOriginState>, seconds: number, tiltX
     'resetOrigin settles at the anchor, not at (0, 0), once one has been set',
     Math.abs(s.x - -0.15) < 1e-9 && Math.abs(s.y - 0.22) < 1e-9 && s.vx === 0 && s.vy === 0,
     `(${s.x}, ${s.y}) v=(${s.vx}, ${s.vy})`,
+  )
+}
+
+// 12. docs/todo.md entry 146 — chorusNodeOffsets: count is 3 + floor(seed.x *
+//     5), so seed.x = 0 gives the floor (3 nodes) and seed.x just under 1
+//     gives the ceiling (7). Spacing is even — TAU/count between consecutive
+//     angles — and every offset has the same magnitude (NODE_RADIUS, 0.3, not
+//     itself exported so checked via the offsets' own length instead of
+//     against a duplicated constant).
+{
+  const three = chorusNodeOffsets([0, 0, 0, 0])
+  check('chorusNodeOffsets: seed.x = 0 gives the floor, 3 nodes', three.length === 3, `${three.length} nodes`)
+  const seven = chorusNodeOffsets([0.999, 0, 0, 0])
+  check('chorusNodeOffsets: seed.x near 1 gives the ceiling, 7 nodes', seven.length === 7, `${seven.length} nodes`)
+  const radii = three.map((n) => Math.hypot(n.x, n.y))
+  check(
+    'chorusNodeOffsets: every node sits at the same radius from the anchor',
+    radii.every((r) => Math.abs(r - radii[0]) < 1e-9),
+    `radii ${radii.map((r) => r.toFixed(4)).join(', ')}`,
+  )
+  const angles = three.map((n) => Math.atan2(n.y, n.x))
+  const sector = (2 * Math.PI) / three.length
+  let evenlySpaced = true
+  for (let i = 1; i < angles.length; i++) {
+    let gap = angles[i] - angles[i - 1]
+    gap = ((gap % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI)
+    if (Math.abs(gap - sector) > 1e-6) evenlySpaced = false
+  }
+  check('chorusNodeOffsets: consecutive nodes are one sector apart', evenlySpaced, `sector ${sector.toFixed(4)}`)
+}
+
+// 13. docs/todo.md entry 146 — pickNode: the nearest of two close-together
+//     nodes wins, not merely the first one within radius — the reason
+//     origin.ts's own comment gives for returning the nearest rather than
+//     the first match.
+{
+  const anchor = { x: 0, y: 0 }
+  const nodes = [
+    { x: 0.1, y: 0 },
+    { x: 0.12, y: 0 },
+  ]
+  const radiusUv = 0.05
+  check(
+    'pickNode: of two overlapping nodes, the nearer one is returned',
+    pickNode(nodes, anchor, 0.115, 0, radiusUv) === 1,
+    `expected index 1`,
+  )
+  check(
+    'pickNode: the other way round, the other node wins',
+    pickNode(nodes, anchor, 0.101, 0, radiusUv) === 0,
+    `expected index 0`,
+  )
+  check('pickNode: outside every node’s radius, nothing is picked', pickNode(nodes, anchor, 5, 5, radiusUv) === null, 'expected null')
+  check(
+    'pickNode: offsets are measured from the given anchor, not the origin',
+    pickNode(nodes, { x: 1, y: 1 }, 1.1, 1, radiusUv) === 0,
+    `expected index 0`,
+  )
+}
+
+// 14. docs/todo.md entry 146's own Done-when: "a re-roll resets every node to
+//     its seeded offset regardless of what was dragged". This module has no
+//     notion of a drag in progress — that lives in scene.ts's `nodeDrags`
+//     map — but it is what makes the reset possible at all: calling
+//     chorusNodeOffsets again with a new seed produces a wholly new
+//     arrangement, unrelated to whatever the previous seed's nodes were,
+//     which is the guarantee scene.ts's own re-roll sites rely on.
+{
+  const before = chorusNodeOffsets([0.1, 0.2, 0.3, 0.4])
+  const after = chorusNodeOffsets([0.8, 0.1, 0.9, 0.2])
+  check(
+    'chorusNodeOffsets: a different seed produces a different arrangement',
+    before.length !== after.length || before.some((n, i) => Math.abs(n.x - after[i].x) > 1e-9 || Math.abs(n.y - after[i].y) > 1e-9),
+    'arrangements were identical',
+  )
+  const same = chorusNodeOffsets([0.1, 0.2, 0.3, 0.4])
+  check(
+    'chorusNodeOffsets: the same seed always reproduces the same arrangement',
+    same.length === before.length && same.every((n, i) => n.x === before[i].x && n.y === before[i].y),
+    'same seed gave a different arrangement',
   )
 }
 

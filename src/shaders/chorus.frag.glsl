@@ -28,7 +28,6 @@ uniform float uTime;
 uniform float uLevel;
 uniform float uLow;
 uniform float uBreak;
-uniform vec4 uSeed;
 // docs/todo.md entry 96 — the moon's own abundance, over ripple reach
 // and lifespan only (colour stays the sun's alone). 1.0 at new moon or
 // moon-down, identical to today; scene.ts is the only writer.
@@ -49,8 +48,16 @@ const int MAX_RIPPLES = 24;
 const int AUDIO_RIPPLES = 8;
 uniform vec4 uRipples[MAX_RIPPLES];
 uniform vec2 uOrigin; // docs/todo.md entry 132 — the geometric centre, hanging under gravity
-
-const float TAU = 6.28318530718;
+// docs/todo.md entry 146 — the node ring itself, as offsets from `uOrigin`,
+// uploaded from scene.ts rather than computed here from `uSeed`: a drag
+// moves one node off the seeded arrangement, and scene.ts's own hit-test
+// needs to agree with this shader about where every node actually is, which
+// only holds if there is exactly one place the positions are computed.
+// Eight slots — `uNodeCount` is never more, `chorusNodeOffsets`'s own
+// ceiling in origin.ts — `uNodeCount` says how many are real.
+const int MAX_NODES = 8;
+uniform vec2 uNodes[MAX_NODES];
+uniform int uNodeCount;
 
 const float LIFESPAN = 3.2;
 const float FADE_FROM = 0.6;
@@ -59,13 +66,6 @@ const float FADE_FROM = 0.6;
 const float OUTER_STROKE = 0.22; // of radius
 const float INNER_STROKE = 0.09; // of the outer radius
 const float INNER_RADIUS = 0.70; // of radius
-
-// Radius of the arrangement, in units of half the *short* screen dimension.
-// 0.30 puts the nodes about three fifths of the way to the side edges on a
-// phone held upright: far enough apart that two families meet somewhere in the
-// middle of the frame rather than immediately, close enough that a node's own
-// rings still fill the frame before they die.
-const float NODE_RADIUS = 0.30;
 
 // Cheap scalar hash. It only has to decorrelate two birth times, and the
 // spawn cooldown in ripples.ts guarantees they differ by at least 0.28 s,
@@ -92,16 +92,12 @@ void main() {
   // almost immediately, trailing off for most of the ring travel).
   float fadeFrom = FADE_FROM + uMoonBloom;
 
-  // Node count and the arrangement's rotation are both seed choices, so a
-  // re-roll restructures the interference rather than just re-timing it. Three
-  // is the fewest that still reads as an arrangement rather than as two points
-  // and an axis. The ceiling is set by the buffer, not by the geometry: only
-  // eight rings can be alive at once, so past seven nodes a run of hits mostly
-  // lights each node once and nothing meets a neighbour's front.
-  float nodes = 3.0 + floor(uSeed.x * 5.0);
-  float sector = TAU / nodes;
-  float phase = uSeed.z * TAU;
-
+  // docs/todo.md entry 146 — node count and positions arrive as `uNodes`/
+  // `uNodeCount` now (scene.ts's own `chorusNodeOffsets`, seeded exactly as
+  // this used to compute inline — three to seven nodes, a re-roll choice).
+  // The ceiling is set by the buffer, not by the geometry: only eight rings
+  // can be alive at once, so past seven nodes a run of hits mostly lights
+  // each node once and nothing meets a neighbour's front.
   float ink = 0.0;
 
   // docs/todo.md entry 122 — an ink budget for touch rings, same finding and
@@ -129,18 +125,30 @@ void main() {
     // docs/todo.md entry 33: a touch ring fires the nearest of the fixed
     // nodes rather than an arbitrary hashed one — the finger is an
     // *influence* on which origin fires, not a new origin of its own, since
-    // this view's identity is its ring of fixed nodes. Closed-form nearest
-    // rather than a small loop over each node: the node spacing is exactly
-    // `sector`, so rounding the touch's own angle to the nearest multiple of
-    // it is the same answer a loop would find.
-    float which = i < AUDIO_RIPPLES
-      ? floor(hash(birth) * nodes)
-      : mod(floor((atan(uRipples[i].w, uRipples[i].z) - phase) / sector + 0.5), nodes);
-    float a = phase + which * sector;
+    // this view's identity is its ring of fixed nodes. docs/todo.md entry
+    // 146 replaces the closed-form nearest (exact only while every node sits
+    // at its seeded angle) with a real loop over `uNodes`, since a dragged
+    // node breaks the even spacing the old shortcut relied on — the same
+    // structural change `origin.ts`'s own `pickNode` made on the CPU side,
+    // done here for the shader's own copy of "which node is nearest".
+    int origin_i = 0;
+    if (i < AUDIO_RIPPLES) {
+      origin_i = int(floor(hash(birth) * float(uNodeCount)));
+    } else {
+      float nearest = 1.0e9;
+      for (int j = 0; j < MAX_NODES; j++) {
+        if (j >= uNodeCount) break;
+        float d = distance(uRipples[i].zw, uOrigin + uNodes[j]);
+        if (d < nearest) {
+          nearest = d;
+          origin_i = j;
+        }
+      }
+    }
     // docs/todo.md entry 132 — the whole node ring hangs with the geometric
-    // centre; the nodes keep their spacing and their fold, and the figure
-    // translates as one.
-    vec2 origin = uOrigin + NODE_RADIUS * vec2(cos(a), sin(a));
+    // centre; entry 146 lets a dragged node also move independently within
+    // it, and the figure otherwise still translates as one.
+    vec2 origin = uOrigin + uNodes[origin_i];
     float dist = length(uv - origin);
 
     float percent = age / lifespan;
@@ -167,18 +175,16 @@ void main() {
   }
 
   // The nodes themselves, so the arrangement is legible between hits and a
-  // ring visibly comes *from* somewhere. Drawn with an angular fold rather
-  // than a loop over the nodes, for the reason Shards folds its symmetry: a
-  // loop would be up to seven more length() calls per pixel on a phone GPU for
-  // something one modulo answers exactly.
-  vec2 rel = uv - uOrigin;
-  float r = length(rel);
-  float folded = mod(atan(rel.y, rel.x) - phase + sector * 0.5, sector) - sector * 0.5;
-  // Law of cosines: distance from this pixel to the nearest node. The max()
-  // is not decoration — rounding can push the bracket a hair below zero on the
-  // node itself, and sqrt of a negative is a NaN that survives every clamp
-  // downstream and paints the pixel white.
-  float dNode = sqrt(max(r * r + NODE_RADIUS * NODE_RADIUS - 2.0 * r * NODE_RADIUS * cos(folded), 0.0));
+  // ring visibly comes *from* somewhere. docs/todo.md entry 146 replaces the
+  // angular fold this used to close-form with a real loop over `uNodes` —
+  // the fold was exact only while every node sat at its seeded angle, evenly
+  // spaced by construction, which a drag no longer guarantees. Up to seven
+  // extra length() calls per pixel is the measured cost of that.
+  float dNode = 1.0e9;
+  for (int j = 0; j < MAX_NODES; j++) {
+    if (j >= uNodeCount) break;
+    dNode = min(dNode, length(uv - (uOrigin + uNodes[j])));
+  }
   float nodeR = 0.010 + 0.040 * uLow;
   ink += ring(dNode, nodeR, px * 0.9, px) * (0.22 + 0.55 * uLow);
 

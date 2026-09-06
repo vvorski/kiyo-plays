@@ -46,6 +46,8 @@ import {
   resetOrigin,
   setAnchor,
   pickEmitter,
+  pickNode,
+  chorusNodeOffsets,
   createRippleState,
   createTouchStreamState,
   Envelope,
@@ -176,6 +178,11 @@ const SETTLE = 1.5
 const STRUCTURE_THRESHOLD = 0.5
 /** Minimum seconds between automatic reshapes, so a boundary's own decay tail can't retrigger it. */
 const STRUCTURE_COOLDOWN = 8
+
+/** docs/todo.md entry 146 — Chorus's own node-count ceiling (3 to 7, from
+ *  `chorusNodeOffsets`) plus one, matching `chorus.frag.glsl`'s own uniform
+ *  array size. */
+const CHORUS_NODE_SLOTS = 8
 
 /**
  * docs/todo.md entry 92 — a colour travels from where it was to where it's
@@ -410,9 +417,11 @@ export interface Visualiser {
   setTouches(touches: ReadonlyArray<{ contactId: number; x: number; y: number; speed: number }>): void
   /**
    * docs/todo.md entry 141 — a contact currently holding the centre-anchored
-   * emitter (Circles, Shards, Grid, Rose only — see origin.ts's own
-   * `pickEmitter` comment for why Chorus's several nodes are a separate,
-   * unshipped entry). `pos` while held is the live fingertip in the same
+   * emitter (Circles, Shards, Grid, Rose only — Chorus's several nodes are
+   * `hitTestChorusNode`/`setChorusNodeDrag` below, entry 146's own separate
+   * pair, since one node among several needs an index and the other four
+   * views never have more than one thing to pick up). `pos` while held is
+   * the live fingertip in the same
    * shader-uv space `setTouches` takes — `uOrigin` becomes exactly this,
    * every frame, no spring; `null` ends the drag and anchors the spring (or,
    * with `grav` off, the picture itself) at wherever `pos` last was, via
@@ -430,6 +439,28 @@ export interface Visualiser {
    * writing to it and this entry is not the place to start.
    */
   hitTestEmitter(x: number, y: number, radiusUv: number): boolean
+  /**
+   * docs/todo.md entry 146 — same query as `hitTestEmitter`, for Chorus's
+   * several nodes instead of the other four views' one. Returns `null`
+   * immediately when Chorus is not the mounted geometric view (nothing to
+   * pick up) or when nothing is within `radiusUv`; otherwise the index of
+   * the *nearest* node, matching `origin.ts`'s own `pickNode`. The index is
+   * what `setChorusNodeDrag` below takes, since a shared `Map` needs a key
+   * and "the fingertip position" is not stable enough to be one across a
+   * multi-touch drag.
+   */
+  hitTestChorusNode(x: number, y: number, radiusUv: number): number | null
+  /**
+   * docs/todo.md entry 146 — the several-node equivalent of `setEmitterDrag`.
+   * `pos` while held is the live fingertip, no spring, no lag, exactly the
+   * same Decided entry 141 already established; `null` ends that one node's
+   * drag and folds its live position back into `chorusNodes` as a fresh
+   * offset from the current anchor, via the same arithmetic `setEmitterDrag`
+   * uses for the single anchor. Keyed by node index so more than one node
+   * can be held across a multi-touch gesture without one release clobbering
+   * another node still in flight.
+   */
+  setChorusNodeDrag(index: number, pos: { x: number; y: number } | null): void
   /**
    * A mouse cursor over the picture — docs/todo.md entry 112. `x`/`y` are
    * the same shader-uv pair `setTouches` takes; `speed` is the same smoothed
@@ -671,6 +702,16 @@ export function createVisualiser(
     uRipples: {
       value: Array.from({ length: MAX_RIPPLES }, () => new Vector4(-1000, 0, 0, 0)),
     },
+    // docs/todo.md entry 146 — Chorus's own several emitters, as offsets from
+    // uOrigin, uploaded from here instead of computed from uSeed inside
+    // chorus.frag.glsl: one source for the arrangement is what lets a drag's
+    // own hit-test and the picture it moves agree on where a node actually
+    // is. Eight slots — the shader's own `nodes <= 7` ceiling plus one —
+    // `uNodeCount` says how many are real; the rest are never read.
+    uNodes: {
+      value: Array.from({ length: CHORUS_NODE_SLOTS }, () => new Vector2(0, 0)),
+    },
+    uNodeCount: { value: 0 },
     // docs/todo.md entry 96 — the moon's own abundance, as a reach and a
     // lifespan multiplier on every ripple-drawing geometric view. Both
     // default to 1.0 (today's constants, unmoved) and only ever move
@@ -951,6 +992,29 @@ export function createVisualiser(
   // only written back (via `setAnchor`) on release, which is what makes the
   // drop point the new hanging point rather than a place passed through.
   let emitterDrag: { x: number; y: number } | null = null
+  // docs/todo.md entry 146 — which geometric view is currently mounted, kept
+  // here because `setGeometricView` (entry 92) never stored it anywhere: it
+  // only ever swapped the material. `hitTestChorusNode` needs to know
+  // whether Chorus is the one on screen before it makes sense to test
+  // against Chorus's own node ring, and nothing else in scene.ts needed that
+  // answer before this entry. Updated where the material swap actually
+  // happens (inside the view-dip callback), not at the call site, so it
+  // never leads what is actually drawn.
+  let currentGeometricView: GeometricViewName = options.geometricView
+  // docs/todo.md entry 146 — Chorus's own several nodes, as offsets from the
+  // anchor, one array shared by the render loop (which uploads it every
+  // frame to `uNodes`) and the hit-test (which reads it to answer "which
+  // node did that touch land on"). Recomputed at each of `uSeed`'s own three
+  // re-roll sites below, so a re-roll restructures the ring exactly the way
+  // it used to restructure chorus.frag.glsl's own closed-form arrangement.
+  let chorusNodes: { x: number; y: number }[] = chorusNodeOffsets(options.seed)
+  // docs/todo.md entry 146 — nodes currently held by a finger, keyed by
+  // index, absolute position (not an offset) exactly like `emitterDrag`: no
+  // spring, no lag while held, per the same Decided entry 141 already
+  // established for the single-emitter views. A `Map` rather than a fixed
+  // array because more than one node can be dragged at once (multi-touch),
+  // which the single-anchor `emitterDrag` never had to consider.
+  const nodeDrags = new Map<number, { x: number; y: number }>()
   // docs/todo.md entry 76 — ticked from the same `motionDisturb` above,
   // already recorded here every frame by `setMotion` for the colour bias.
   // No new setter: this is the "no new plumbing at all" the entry asks for.
@@ -1314,6 +1378,24 @@ export function createVisualiser(
       } else {
         uniforms.uOrigin.value.set(originState.anchorX, originState.anchorY)
       }
+      // docs/todo.md entry 146 — Chorus's own several nodes, uploaded every
+      // frame after `uOrigin` above so a node being dragged can be expressed
+      // as an offset from wherever the picture's centre actually is *this*
+      // frame, matching `uOrigin`'s own live-versus-settled distinction: a
+      // node not currently held is `chorusNodes[i]` (an offset from the
+      // anchor, restructured only by a re-roll); a node currently held is
+      // its live fingertip position minus `uOrigin`'s current value, which
+      // is what makes it track the finger with no spring while still
+      // composing correctly with a bob that is mid-swing under it.
+      for (let i = 0; i < chorusNodes.length; i++) {
+        const live = nodeDrags.get(i)
+        if (live) {
+          uniforms.uNodes.value[i].set(live.x - uniforms.uOrigin.value.x, live.y - uniforms.uOrigin.value.y)
+        } else {
+          uniforms.uNodes.value[i].set(chorusNodes[i].x, chorusNodes[i].y)
+        }
+      }
+      uniforms.uNodeCount.value = chorusNodes.length
       const emitterGravity = { x: emitterGravityX, y: emitterGravityY }
       const emitterHalfExtent = {
         x: lastClientWidth / (2 * Math.min(lastClientWidth, lastClientHeight)),
@@ -1395,7 +1477,15 @@ export function createVisualiser(
         lastNovelty <= STRUCTURE_THRESHOLD &&
         now - lastAutoReroll > STRUCTURE_COOLDOWN
       ) {
-        uniforms.uSeed.value.set(Math.random(), Math.random(), Math.random(), Math.random())
+        const nextSeed: [number, number, number, number] = [Math.random(), Math.random(), Math.random(), Math.random()]
+        uniforms.uSeed.value.set(...nextSeed)
+        // docs/todo.md entry 146 — a structural boundary restructures Chorus's
+        // node ring exactly as it restructures every other view's reading of
+        // `uSeed`, and drops any drag in progress: a node held through a
+        // re-roll would otherwise keep answering to a seed that no longer
+        // exists anywhere else in the picture.
+        chorusNodes = chorusNodeOffsets(nextSeed)
+        nodeDrags.clear()
         lastAutoReroll = now
       }
       lastNovelty = params.novelty
@@ -1565,6 +1655,7 @@ export function createVisualiser(
         })
         geometryMaterial.dispose()
         geometryMaterial = next
+        currentGeometricView = name
       })
     },
 
@@ -1649,6 +1740,40 @@ export function createVisualiser(
         originState.vx = 0
         originState.vy = 0
         emitterDrag = null
+      }
+    },
+
+    hitTestChorusNode(x, y, radiusUv) {
+      if (currentGeometricView !== 'chorus') return null
+      // Against `uOrigin`'s current value, not the anchor: while gravity is
+      // on the bob can be well away from the anchor mid-swing, and a hit
+      // test against the anchor would miss nodes exactly where they are
+      // drawn (`uOrigin + uNodes[i]` — see the render loop's own upload
+      // below). `chorusNodes` is an offset either way, so nothing else here
+      // needs to change to make "anchor" mean "wherever the centre actually
+      // is right now".
+      return pickNode(chorusNodes, { x: uniforms.uOrigin.value.x, y: uniforms.uOrigin.value.y }, x, y, radiusUv)
+    },
+
+    setChorusNodeDrag(index, pos) {
+      if (pos) {
+        nodeDrags.set(index, pos)
+      } else {
+        // Same fold-back-to-an-offset arithmetic setEmitterDrag uses for the
+        // single anchor, done relative to `uOrigin`'s *current* value rather
+        // than the anchor directly: while gravity is on, `uOrigin` is
+        // wherever the bob is right now, not the anchor it is swinging
+        // toward, and a node dropped mid-swing should sit where the finger
+        // actually left it relative to the picture on screen, not snap to
+        // where the anchor will eventually settle.
+        const live = nodeDrags.get(index)
+        if (live) {
+          chorusNodes[index] = {
+            x: live.x - uniforms.uOrigin.value.x,
+            y: live.y - uniforms.uOrigin.value.y,
+          }
+        }
+        nodeDrags.delete(index)
       }
     },
 
@@ -1748,7 +1873,12 @@ export function createVisualiser(
     },
 
     randomise() {
-      uniforms.uSeed.value.set(Math.random(), Math.random(), Math.random(), Math.random())
+      const nextSeed: [number, number, number, number] = [Math.random(), Math.random(), Math.random(), Math.random()]
+      uniforms.uSeed.value.set(...nextSeed)
+      // docs/todo.md entry 146 — same reasoning as the structural boundary's
+      // own re-roll above: a manual re-roll restructures the node ring too.
+      chorusNodes = chorusNodeOffsets(nextSeed)
+      nodeDrags.clear()
     },
 
     stats: () => ({

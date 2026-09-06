@@ -4909,8 +4909,9 @@ not a proxy in the path · dependency **no** — no runtime bytes; `public/CNAME
 is 18 characters.
 
 ### 146. Chorus's several emitters join the pick-up-and-move entry
-`status: building` · started 2026-09-06 · added 2026-09-06 · **the follow-up entry 141 requires before
-being marked done** · extends 33, 57, and 141
+`status: done` · started 2026-09-06 · added 2026-09-06 · build 487 · extends
+33, 57, and 141 · **phone frame-time comparison not run — no device available
+this session; see build note**
 
 **Do** — extend entry 141's pick-up-and-move gesture to Chorus's several
 fixed nodes: hit-test each one, drag the nearest, and on release let it keep

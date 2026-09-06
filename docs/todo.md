@@ -3973,7 +3973,9 @@ and Rose were) · url no (`?atmospheric=umbra` is a new value, not a new
 parameter) · capture no · dependency no.
 
 ### 139. Filings — a field with poles, and the music moves them
-`status: building` · started 2026-09-06 · added 2026-09-05 · a new atmospheric view · independent of 138 and 140, and of 110
+`status: done` · added 2026-09-05 · build 480 · followed entry 138's colour
+correction from the start · a new atmospheric view · independent of 138 and
+140, and of 110
 
 **Do** — add an atmospheric view, **Filings**: iron filings on glass over a
 handful of magnetic poles, drawn as the curved field lines that run between
@@ -4017,12 +4019,12 @@ pole flips.
 - **The poles themselves are never drawn** → no dots, no markers. **Mine**: a
   filings photograph shows the field, not the magnet, and drawing the source
   would turn a field into a diagram — which is Spectrogram's claimed principle.
-- **Colour comes from the layer filter** → luminance only, as everywhere else.
-  **Flagged, not yet corrected**: entry 138 shipped with this identical
-  bullet and found it wrong — every atmospheric shader (`caustics`, `aurora`,
-  `field`, `cells`, `fringe`) draws its own full RGB, filtered by `atmColour`
-  as a tint on top, not luminance-only the way the *geometric* layer's
-  contract works (`lattice.frag.glsl:16`). Check before building this one.
+- ~~**Colour comes from the layer filter** → luminance only, as everywhere
+  else.~~ **Corrected before building**, per the flag left here: this is the
+  geometric layer's contract, not the atmospheric one. `filings.frag.glsl`
+  draws its own full RGB (a near-black ground, pale cool lines) and gets
+  `atmColour` multiplied on top as a tint, same as `caustics`/`aurora`/
+  `field`/`cells`/`fringe`/`umbra`.
 
 **Identity when off** — a new view, so nothing existing changes. In silence the
 six poles sit at their drift positions with near-equal weak strengths and the

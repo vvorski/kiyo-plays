@@ -25,6 +25,7 @@ import chorusFrag from './shaders/chorus.frag.glsl?raw'
 import circlesFrag from './shaders/circles.frag.glsl?raw'
 import driftFrag from './shaders/drift.frag.glsl?raw'
 import fieldFrag from './shaders/field.frag.glsl?raw'
+import filingsFrag from './shaders/filings.frag.glsl?raw'
 import fringeFrag from './shaders/fringe.frag.glsl?raw'
 import gridFrag from './shaders/grid.frag.glsl?raw'
 import latticeFrag from './shaders/lattice.frag.glsl?raw'
@@ -169,6 +170,14 @@ export const ATMOSPHERIC_VIEWS = {
     label: 'Umbra',
     description: 'A light behind a drift of solid bodies. Silhouettes, lit rims, and gaps the light leaks through.',
     fragmentShader: umbraFrag,
+  },
+  // docs/todo.md entry 139 — a ninth principle: topology. Six poles, one per
+  // band, and lines that must start somewhere and end somewhere — a vector
+  // field, where every view above it is a scalar one.
+  filings: {
+    label: 'Filings',
+    description: 'Iron filings over six magnetic poles the spectrum moves. A hit flips one, and the field re-routes.',
+    fragmentShader: filingsFrag,
   },
 } satisfies Record<string, View>
 

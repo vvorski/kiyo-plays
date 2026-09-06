@@ -181,3 +181,83 @@ export const RELEASE_NAMES: readonly string[] = [
  *  `version.ts` and every other reader is unchanged by this being an array
  *  now instead of a single constant. */
 export const RELEASE_NAME = RELEASE_NAMES[RELEASE_NAMES.length - 1]
+
+// docs/todo.md entry 137 — every release opens on its own seed, deterministic
+// from RELEASE_NAME rather than Math.random(), so the four numbers `uSeed`
+// hands out at construction (scene.ts:627) are the same on every load of the
+// same build and different from every other name this file has ever carried.
+// The build number was considered and rejected as the hash's input: it moves
+// on every commit, so a seed keyed to it would change the opening look for
+// builds that changed nothing visual, where RELEASE_NAME changes exactly once
+// per release, by CLAUDE.md's own rule — precisely the cadence this asks for.
+
+const FNV_PRIME = 0x01000193 // the standard FNV-1a 32-bit prime, unmodified
+
+// Four distinct starting states for one shared pass over the name's bytes,
+// each a byte-rotation of the canonical FNV-1a 32-bit offset basis
+// (0x811c9dc5) rather than four unrelated constants pulled from nowhere —
+// still a single named, checkable function (FNV-1a) run four times with
+// four different seeds, not four different hash algorithms to audit.
+const FNV_OFFSET_BASES: readonly [number, number, number, number] = [
+  0x811c9dc5, 0x1c9dc581, 0x9dc581c9, 0xc581c9dc,
+]
+
+const clamp01 = (v: number): number => Math.min(1, Math.max(0, v))
+
+/**
+ * Four independent-ish FNV-1a-32 hashes of `name`, one pass over the bytes
+ * with four running accumulators rather than four separate passes — the
+ * "one pass" Decided promises. `Math.imul` for the 32-bit multiply: plain
+ * `*` on numbers this size silently loses the low bits to float64 rounding,
+ * which would make the hash depend on JS engine behaviour rather than only
+ * on the bytes fed in.
+ */
+function fnv1aQuad(name: string): [number, number, number, number] {
+  const h = FNV_OFFSET_BASES.slice() as [number, number, number, number]
+  for (let i = 0; i < name.length; i++) {
+    const byte = name.charCodeAt(i) & 0xff
+    for (let k = 0; k < 4; k++) h[k] = Math.imul(h[k] ^ byte, FNV_PRIME) >>> 0
+  }
+  return h
+}
+
+/**
+ * The four 0-1 numbers a release (or any string) opens on. The top 16 bits
+ * of each 32-bit hash, not the bottom — FNV-1a's own avalanche is weakest in
+ * the low bits it multiplies into last, and `uSeed`'s coarsest consumer
+ * (`SYMMETRY = 4 + floor(uSeed.y * 6)`, six-way) only needs the top few bits
+ * to already differ between adjacent names for the whole tuple to look
+ * unrelated — a margin the probe checks directly against every name this
+ * project has ever shipped, rather than assumed from the algorithm's own
+ * reputation.
+ */
+export function releaseSeed(name: string = RELEASE_NAME): readonly [number, number, number, number] {
+  const h = fnv1aQuad(name)
+  return h.map((x) => (x >>> 16) / 65536) as [number, number, number, number]
+}
+
+/**
+ * `?seed=` as sixteen hex characters, four per component — a 16-bit
+ * quantisation exactly, so the encoder below is lossless within it. Chosen
+ * over a hand-rolled compact encoding (Decided): the string is meant to sit
+ * in a URL a person retypes or pastes, and hex round-trips through that with
+ * no locale or float-formatting hazard a decimal or base64 string would risk.
+ */
+export function encodeSeedHex(seed: readonly [number, number, number, number]): string {
+  return seed
+    .map((v) => Math.min(65535, Math.floor(clamp01(v) * 65536)).toString(16).padStart(4, '0'))
+    .join('')
+}
+
+/**
+ * The inverse of `encodeSeedHex`, or `null` for anything that is not exactly
+ * sixteen hex characters — wrong length, non-hex, or empty all fall back to
+ * the release seed the same way every other malformed URL parameter here
+ * already does, rather than throwing.
+ */
+export function decodeSeedHex(hex: string): readonly [number, number, number, number] | null {
+  if (!/^[0-9a-f]{16}$/i.test(hex)) return null
+  const out: number[] = []
+  for (let i = 0; i < 16; i += 4) out.push(parseInt(hex.slice(i, i + 4), 16) / 65536)
+  return out as [number, number, number, number]
+}

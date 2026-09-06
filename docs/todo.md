@@ -3728,7 +3728,12 @@ let go, tap somewhere else.
 
 
 ### 137. Every release opens on its own seed, and the seed becomes writable
-`status: building` · started 2026-09-06 · added 2026-09-05 · independent of the rest of the queue
+`status: done` · added 2026-09-05 · build 476 · **the `?debug` DNA line's live
+round trip (paste into a fresh tab, compare pictures) is unverified — the HUD
+that carries the readout is gated behind a real mic grant this harness cannot
+give; verified instead by reading `releaseSeed()` directly, byte-identical
+across two separate page loads, and by code review of `dnaUrl()`'s string
+construction** · independent of the rest of the queue
 
 **Do** — derive the opening `uSeed` from `RELEASE_NAME` instead of
 `Math.random()`, add a `?seed=` parameter that restores it, and print the whole

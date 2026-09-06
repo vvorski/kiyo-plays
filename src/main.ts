@@ -52,7 +52,7 @@ import { applyReleaseTone } from './release-tone'
 import { mountShare } from './share'
 import { Director } from './director'
 import { createVisualiser, type Visualiser } from './scene'
-import { RELEASE_NAME } from './release-name'
+import { RELEASE_NAME, releaseSeed, encodeSeedHex, decodeSeedHex } from './release-name'
 import {
   SlowAnalysis,
   createPostureState,
@@ -184,6 +184,53 @@ function resolvePrefs(): Prefs {
     // Also no URL parameter, for the same reason. docs/todo.md entry 71.
     skyOverride: stored.skyOverride,
   }
+}
+
+/**
+ * docs/todo.md entry 137 — the four numbers this load opens on. Deliberately
+ * not part of `resolvePrefs()`/`Prefs`: this is read once, at construction,
+ * and never written back to storage — a persisted seed would show your last
+ * shape on every load, and the release's own seed (the whole point) would be
+ * seen once, by whoever's storage is empty, and never again.
+ *
+ * `?seed=` beats the release seed, matching how `?rgb=` already outranks a
+ * stored colour above; malformed or missing falls back the same way every
+ * other parameter here already does.
+ */
+function resolveSeed(): readonly [number, number, number, number] {
+  const raw = new URLSearchParams(window.location.search).get('seed')
+  return (raw && decodeSeedHex(raw)) || releaseSeed()
+}
+
+/**
+ * docs/todo.md entry 137 — the whole look as one copyable string, for the
+ * `?debug` readout. The URL, completed: every look parameter that already
+ * exists, plus `?seed=`, so pasting this into a fresh tab reproduces the
+ * picture currently on screen — barring any re-roll since load, which
+ * Decided deliberately declines to make capturable ("a re-roll still goes
+ * somewhere random"). `geo=`/`atm=` rather than `mix=`: a session where the
+ * two were set independently (from the HUD, never a link) would otherwise
+ * lose the atmosphere's own alpha the moment `mix=` overwrote it back to the
+ * value that parameter implies. Built from `prefs` — the same source
+ * `Hud.current()` already reads — so this reflects whatever is live right
+ * now, including anything the autopilot or a shake has since adopted, not
+ * only what the page loaded with.
+ */
+function dnaUrl(prefs: Prefs, seed: readonly [number, number, number, number]): string {
+  const rgb =
+    `${Math.round(prefs.geoColour.r * 100)},` +
+    `${Math.round(prefs.geoColour.g * 100)},` +
+    `${Math.round(prefs.geoColour.b * 100)}`
+  const params =
+    `geometric=${prefs.geometricView}` +
+    `&atmospheric=${prefs.atmosphericView}` +
+    `&rgb=${rgb}` +
+    `&merge=${prefs.mergeMode}` +
+    `&geo=${Math.round(prefs.geoAlpha * 100)}` +
+    `&atm=${Math.round(prefs.atmAlpha * 100)}` +
+    `&mapping=${prefs.mapping}` +
+    `&seed=${encodeSeedHex(seed)}`
+  return `${window.location.origin}${window.location.pathname}?${params}`
 }
 
 /**
@@ -678,6 +725,9 @@ async function main(): Promise<void> {
   }
 
   const prefs = resolvePrefs()
+  // docs/todo.md entry 137 — the four numbers this load opens on, computed
+  // once here and read only at construction below.
+  const seed = resolveSeed()
 
   // docs/todo.md entry 45: the autopilot is unconditional now, and
   // `prefs.autopilot` is kept only as a stored-shape fact, no longer
@@ -728,6 +778,7 @@ async function main(): Promise<void> {
     atmMergeMode: gateLook?.atmMergeMode ?? prefs.atmMergeMode,
     geoAlpha: prefs.geoAlpha,
     atmAlpha: prefs.atmAlpha,
+    seed,
   })
 
   // Flipped by the real loop taking over, which is what stops the idle frames.
@@ -2060,6 +2111,11 @@ async function main(): Promise<void> {
           blocked: !gesturesCalm(performance.now() / 1000),
           sinceDisturbed: Math.min(99, performance.now() / 1000 - lastDisturbedAt),
         },
+        // docs/todo.md entry 137 — the whole look, live, as one copyable
+        // string. Recomputed every visible frame like everything else on
+        // this readout; a URLSearchParams-worth of string building is not
+        // something a numeric debug overlay needs to worry about the cost of.
+        dna: dnaUrl(prefs, seed),
       })
     }
     requestAnimationFrame(frame)

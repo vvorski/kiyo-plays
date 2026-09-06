@@ -11,6 +11,7 @@
 <div class="grid" id="grid"></div>
 <script type="module">
   import { createVisualiser } from '/src/scene.ts'
+  import { releaseSeed } from '/src/release-name.ts'
 
   // A camera without a camera.
   //
@@ -129,6 +130,14 @@
       atmosphericView: 'field',
       mergeMode: 'normal',
       mix: 0.6,
+      // docs/todo.md entry 137 — VisualiserOptions.seed is required now; a
+      // dev-only probe page has no release of its own to derive one from, so
+      // this uses the current build's, same as any other unspecified load.
+      // Not touching the rest of this options object, which was already out
+      // of step with VisualiserOptions (no camColour/atmMergeMode/geoAlpha/
+      // atmAlpha, an unused `mix`) before this entry — a pre-existing gap
+      // outside what this entry is here to fix.
+      seed: releaseSeed(),
     })
     v.setPassthrough(c.mix > 0 ? cam.source : null, c.mix)
     made.push({ ...c, v, canvas })

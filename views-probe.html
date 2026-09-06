@@ -21,6 +21,7 @@
 <div class="grid" id="grid"></div>
 <script type="module">
   import { createVisualiser } from '/src/scene.ts'
+  import { releaseSeed } from '/src/release-name.ts'
   import { ATMOSPHERIC_VIEWS, GEOMETRIC_VIEWS } from '/src/views.ts'
   import { MAPPINGS } from '/src/engine/fast.ts'
   import { startMicrophone } from '/src/engine/capture.ts'
@@ -76,6 +77,12 @@
         // broken atmospheric shader with its own output.
         geoAlpha: 0,
         atmAlpha: 1,
+        // docs/todo.md entry 137 — required now, and an improvement here
+        // specifically: several atmospheric shaders read uSeed too, so this
+        // grid's screenshots go from "reproducible only within one run" (the
+        // old Math.random()) to reproducible across runs, which is what
+        // "frozen" was already claiming to be.
+        seed: releaseSeed(),
       })
       made.push({ name, v, cap })
     }
@@ -167,6 +174,7 @@
         atmMergeMode: 'screen',
         geoAlpha: kind === 'geometric' ? 1 : 0,
         atmAlpha: kind === 'atmospheric' ? 1 : 0,
+        seed: releaseSeed(),
       })
       return { name, kind, v, cap }
     })

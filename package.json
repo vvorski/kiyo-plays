@@ -38,6 +38,7 @@
     "probe:ambient-light": "node --experimental-strip-types scripts/probe-ambient-light.ts",
     "probe:name-decode": "node --experimental-strip-types scripts/probe-name-decode.ts",
     "probe:celestial": "node --experimental-strip-types scripts/probe-celestial.ts",
+    "probe:seed": "node --experimental-strip-types scripts/probe-seed.ts",
     "format": "prettier --write ."
   },
   "dependencies": {

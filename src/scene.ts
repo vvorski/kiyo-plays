@@ -320,6 +320,13 @@ export interface VisualiserOptions {
   geoAlpha: number
   /** 0-1. The atmospheric layer's opacity, applied before the merge mode. */
   atmAlpha: number
+  /** docs/todo.md entry 137 — the four numbers `uSeed` opens on. Computed by
+   *  the caller (`?seed=`, falling back to `releaseSeed()`) rather than here,
+   *  so this file stays agnostic about where a seed comes from, the same way
+   *  it already is about which view or colour it is handed. Only read at
+   *  construction (below); a later re-roll (`randomise()`, the structural
+   *  boundary) still reaches for `Math.random()` and is untouched by this. */
+  seed: readonly [number, number, number, number]
 }
 
 export interface Visualiser {
@@ -624,7 +631,13 @@ export function createVisualiser(
     // person gets to reach in and change directly. Each view is free to spend
     // its four components however suits its own look — scene.ts hands them
     // out and stays agnostic, same as with the fragment shader itself.
-    uSeed: { value: new Vector4(Math.random(), Math.random(), Math.random(), Math.random()) },
+    // docs/todo.md entry 137 — the caller's own seed (from `?seed=` or
+    // `releaseSeed()`), not Math.random(): this is the one call site of the
+    // three that fires exactly once, at construction, which is what makes it
+    // "where a session opens" rather than "a rail it runs on" — the other
+    // two (the structural boundary below, and randomise()) are re-rolls and
+    // keep Math.random() deliberately.
+    uSeed: { value: new Vector4(...options.seed) },
     // (birthTime, birthLevel, x, y) per active ring — widened from vec2 for
     // docs/todo.md entry 33's touch emitter, which needs somewhere to carry
     // *where* it was born. Only the geometric layer's event-driven views

@@ -245,6 +245,12 @@ export interface Hud {
         firstGapMs: number | null
         worstGapMs: number | null
       }
+      /** docs/todo.md entry 137 — the whole look as one copyable string, so a
+       *  shape worth keeping can be written down rather than only described.
+       *  The QR code and share sheet deliberately do NOT carry this — see
+       *  share.ts's own comment — so the readout is the only surface that
+       *  does. */
+      dna?: string
     },
   ): void
   /** Adopt a change decided elsewhere — the autopilot (director.ts) or a
@@ -1497,6 +1503,8 @@ export function createHud(prefs: Prefs, handlers: Handlers, debugFromUrl = false
               `arm   ${s.arm.armed ? 'armed' : 'off'}  hold ${s.arm.hold.toFixed(1)}s` +
                 (s.arm.blocked ? '  BLOCKED' : `  calm ${s.arm.sinceDisturbed.toFixed(1)}s`),
             ]),
+        // docs/todo.md entry 137 — the whole look as one copyable string.
+        ...(s.dna === undefined ? [] : [`dna   ${s.dna}`]),
       ].join('\n')
     },
 

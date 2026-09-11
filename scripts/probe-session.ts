@@ -292,5 +292,72 @@ const canvas = {
   check('no frame runs after dispose', rendersAfter === rendersBefore, `before=${rendersBefore} after=${rendersAfter}`)
 }
 
+// 6. A page put away while the gate is still showing. `pagehide` is bound at
+//    construction, not after Start, so this disposes a session whose idle
+//    loop is the only one that has ever run — and the idle loop must stop
+//    with it. Without the `running` guard it kept rescheduling itself and, on
+//    a bfcache restore, rendered into a disposed visualiser forever.
+{
+  const { v, calls } = fakeVisualiser()
+  const session = createSession({ visualiser: v, prefs: freshPrefs(), seed: releaseSeed(), autopilot: true, dnaBase: 'http://probe/', shell: NULL_SHELL, gateShowing: () => true, canvas })
+  pump(4)
+  const before = calls.filter((c) => c === 'render').length
+  check('gate: the idle loop is running before pagehide', before >= 1, `renders=${before}`)
+  win.dispatch('pagehide', {})
+  check('gate: pagehide disposes the visualiser', calls.includes('dispose'), calls.join(','))
+  calls.length = 0
+  pump(10)
+  const after = calls.filter((c) => c === 'render').length
+  check('gate: no idle frame renders after pagehide', after === 0, `renders after=${after}`)
+  // And a start gesture whose microphone resolved after the page went away
+  // must not bring the session back up against a disposed visualiser.
+  session.start(fakeAudio(), false)
+  calls.length = 0
+  pump(10)
+  const revived = calls.filter((c) => c === 'render').length
+  check('gate: start() after dispose does nothing', revived === 0, `renders after=${revived}`)
+}
+
+// 7. Which changes stand the autopilot down. The seven look controls do; the
+//    two whole-app chips (`showStats`, `gravity`) never did and must not
+//    start — the readout `showStats` turns on prints director.status() live.
+//    The camera band's deliberately empty patch still does.
+{
+  const { v } = fakeVisualiser()
+  let suspended = 0
+  const shell = { ...NULL_SHELL, update: (_p: unknown, s: { director?: { suspended: number } }) => { suspended = s.director?.suspended ?? 0 } }
+  const session = createSession({ visualiser: v, prefs: freshPrefs(), seed: releaseSeed(), autopilot: true, dnaBase: 'http://probe/', shell: shell as typeof NULL_SHELL, gateShowing: () => false, canvas })
+  session.start(fakeAudio(), false)
+  pump(1)
+  check('autopilot: not suspended to start with', suspended === 0, `suspended=${suspended}`)
+  // The no-source call the HUD's own chips make.
+  session.apply({ showStats: true }, { rampS: 0 })
+  pump(1)
+  check('the numeric-readout chip does not suspend the autopilot', suspended === 0, `suspended=${suspended}`)
+  session.apply({ gravity: true }, { rampS: 0 })
+  pump(1)
+  check('the gravity chip does not suspend the autopilot', suspended === 0, `suspended=${suspended}`)
+  session.apply({ geoColour: { r: 0.1, g: 0.2, b: 0.3 } }, { rampS: 0 })
+  pump(1)
+  check('a colour band does suspend the autopilot', suspended > 0, `suspended=${suspended}`)
+  session.dispose()
+}
+
+// 8. The camera opacity band's drag, which sends an empty patch precisely to
+//    ask for the suspend without writing a field. Its own session, so check
+//    7's colour suspend is not what is being read back.
+{
+  const { v } = fakeVisualiser()
+  let suspended = 0
+  const shell = { ...NULL_SHELL, update: (_p: unknown, s: { director?: { suspended: number } }) => { suspended = s.director?.suspended ?? 0 } }
+  const session = createSession({ visualiser: v, prefs: freshPrefs(), seed: releaseSeed(), autopilot: true, dnaBase: 'http://probe/', shell: shell as typeof NULL_SHELL, gateShowing: () => false, canvas })
+  session.start(fakeAudio(), false)
+  pump(1)
+  session.apply({}, { rampS: 0, persist: false })
+  pump(1)
+  check('the camera band\'s empty patch still suspends the autopilot', suspended > 0, `suspended=${suspended}`)
+  session.dispose()
+}
+
 console.log(failures === 0 ? '\nall session checks passed' : `\n${failures} check(s) failed`)
 process.exit(failures === 0 ? 0 : 1)

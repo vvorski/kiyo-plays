@@ -1,5 +1,7 @@
 /**
- * Bootstrap and render loop.
+ * Bootstrap: the page. DOM lookup, the chrome, the gate, prefs/URL
+ * resolution, and the HUD wired up as one `Shell` over a `Session`. The
+ * render loop used to live here and now lives in `session/session.ts`.
  *
  * The two layers, the merge mode, the mix, and the audio mapping are all
  * swappable at runtime, from the control panel or from the URL. URL

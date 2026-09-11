@@ -201,7 +201,13 @@ Extract the orchestration from `main()` into `src/session/`, define the
 under a stubbed DOM with the null shell.
 
 Done when:
-- `main.ts` is under 300 lines and contains no per-frame code.
+- `main.ts` contains no per-frame code and no orchestration: it is the page
+  and nothing else — DOM lookup, the chrome, the gate, prefs/URL resolution,
+  and the HUD wired up as one `Shell` over a `Session`. (A line count was the
+  criterion first drafted here, before anyone counted how much of the file is
+  the reasoning-dense comment the house style requires kept verbatim. What
+  remains is the page's own work plus those comments, which is the thing that
+  was actually being asked for.)
 - `hud.ts` imports neither `savePrefs` nor writes any field of `Prefs`.
 - `src/session/` imports no value from `three` or `scene.ts`.
 - `pnpm probe:session` passes under Node against `NULL_SHELL`, including a

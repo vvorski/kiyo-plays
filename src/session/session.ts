@@ -239,8 +239,26 @@ export function createSession(options: SessionOptions): Session {
     if (patch.showStats !== undefined) prefs.showStats = patch.showStats
     if (patch.gravity !== undefined) prefs.gravity = patch.gravity
     if (doPersist) persist()
-    if (from === 'manual') director.suspend()
-    else shell.lookChanged()
+    // `showStats` and `gravity` are whole-app toggles, not the look: the
+    // director neither reads nor writes either, so changing one is not the
+    // "don't fight the person" signal a colour or a view band is. Neither
+    // chip suspended the autopilot before this file owned persistence —
+    // old hud.ts's `onManualChange()` was reached by exactly seven controls
+    // and neither of these was among them — and `showStats` must not start
+    // now for a reason beyond taste: the readout it turns on prints
+    // `director.status()` live, so suspending on it would make turning the
+    // readout on the cause of the very stillness it exists to diagnose.
+    //
+    // An *empty* patch still suspends. The camera opacity band's drag is
+    // the only caller that sends one, and it sends one precisely to ask for
+    // the suspend without writing a field (see its own comment in hud.ts) —
+    // "touches no field" and "touches only whole-app toggles" are different
+    // claims and only the second one is exempt.
+    const keys = Object.keys(patch)
+    const touchesLook = keys.length === 0 || keys.some((k) => k !== 'showStats' && k !== 'gravity')
+    if (from === 'manual') {
+      if (touchesLook) director.suspend()
+    } else shell.lookChanged()
   }
 
   // ─── camera ──────────────────────────────────────────────────────────
@@ -702,6 +720,16 @@ export function createSession(options: SessionOptions): Session {
 
   // ─── idle ────────────────────────────────────────────────────────────
 
+  /** False from `dispose()` onwards, and read by *both* loops. It lives up
+   *  here rather than beside `frame()` because `pagehide` is bound at
+   *  construction now, so a page put away while the gate is still showing
+   *  disposes a session whose idle loop is the only one that has ever run.
+   *  Without this the idle loop kept rescheduling itself — on a bfcache
+   *  restore it resumes, indefinitely, rendering into a disposed
+   *  visualiser. `idle.isStopped` does not cover it: that is the
+   *  nobody-is-watching timer, not "this session is over". */
+  let running = true
+
   // Capped well below the display's own rate, and stopped outright once nobody
   // is there to see it. The idle preview (build 63) put the visualiser behind
   // the gate so the screen would not be a poster for an absent piece — but it
@@ -716,7 +744,7 @@ export function createSession(options: SessionOptions): Session {
   // one frozen frame — indistinguishable from a crash on a screen whose entire
   // point is that it is already alive.
   const resumeIdle = (): void => {
-    if (live) return
+    if (live || !running) return
     const wasStopped = idle.isStopped
     idle.touch(performance.now())
     if (wasStopped) requestAnimationFrame(idleFrame)
@@ -724,7 +752,7 @@ export function createSession(options: SessionOptions): Session {
   const idleUnbind = [on(document, 'pointerdown', resumeIdle), on(document, 'pointermove', resumeIdle)]
 
   const idleFrame = (frameNow: number): void => {
-    if (live) return
+    if (live || !running) return
     if (idle.tick(frameNow)) {
       const t = (frameNow - idleStart) / 1000
       // The tumble, and nothing else: no re-seed, no shuffle, at any
@@ -754,7 +782,6 @@ export function createSession(options: SessionOptions): Session {
 
   // ─── live ────────────────────────────────────────────────────────────
 
-  let running = true
   let source: AudioSource | null = null
 
   /** Take the shot and leave the mode. The capture itself goes to the shell,
@@ -1015,6 +1042,12 @@ export function createSession(options: SessionOptions): Session {
   }
 
   const start: Session['start'] = (audio, motionGranted) => {
+    // A `pagehide` can land while the gate is still up — it is bound at
+    // construction, not after Start — so the session may already be over by
+    // the time the start gesture's microphone promise resolves. Going live
+    // then would reopen the sensor and start a loop against a disposed
+    // visualiser, so this declines instead.
+    if (!running) return
     source = audio
     live = true
     // docs/todo.md entry 60: undo whatever the gate rolled. `visualiser` is the

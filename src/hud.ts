@@ -100,12 +100,10 @@ const BAND_R = [0.88, 0.75, 0.63, 0.53, 0.43, 0.33]
  *  hit — see `mkChip`'s own comment on how that split is achieved. **Mine**. */
 const R_CHIPS_OUTER_SCALE = 0.8
 
-/** A tap that travels further than this is a drag or a swipe, not a tap —
- *  entry 27 removed the pointer-swipe gestures that once claimed anything
- *  past this boundary, so it now simply marks what a tap-to-open is not.
- *  Exported so main.ts's screenshot band uses the exact same boundary rather
- *  than a second copy of the same number. */
-export const TAP_SLOP_PX = 12
+// TAP_SLOP_PX moved to session/gestures.ts, where the recogniser it bounds
+// now lives, and is re-exported here so this file's own use and
+// hud-probe.html are unaffected.
+export { TAP_SLOP_PX } from './session/gestures'
 /** Half-width of an invisible grab arc. The thumb-safe minimum this file is
  *  built around; the drawn tracks are far thinner. */
 const GRAB_PX = 24

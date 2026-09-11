@@ -16,6 +16,7 @@
     "probe:synth-shake": "node --experimental-strip-types scripts/probe-synth-shake.ts",
     "probe:slow": "node --experimental-strip-types scripts/probe-slow.ts",
     "probe:fullscreen": "node --experimental-strip-types --import ./scripts/dir-import-hook.mjs scripts/probe-fullscreen.ts",
+    "probe:gestures": "node --experimental-strip-types --import ./scripts/dir-import-hook.mjs scripts/probe-gestures.ts",
     "probe:haptics": "node --experimental-strip-types scripts/probe-haptics.ts",
     "probe:emitter": "node --experimental-strip-types scripts/probe-emitter.ts",
     "probe:hover": "node --experimental-strip-types scripts/probe-hover.ts",

@@ -10,9 +10,8 @@
 import { bindKeyboard } from './keyboard'
 import { DEFAULT_GEO_COLOUR, parseGeoColour } from './geo-colour'
 import { startCamera, type CameraSource } from './camera'
-import { createHud, TAP_SLOP_PX } from './hud'
+import { createHud } from './hud'
 import {
-  CHARGE_TIME,
   createHoverState,
   createSynthShake,
   createTouchField,
@@ -24,7 +23,6 @@ import {
   shouldRaiseCamera,
   startSynthShake,
   toShaderUv,
-  updateHover,
   updateSynthShake,
   type Mapping,
   type MappingName,
@@ -80,6 +78,7 @@ import {
 } from './views'
 import { shuffled, dnaQuery, SHUFFLE_RESEED, SHUFFLE_VIEWS, SHUFFLE_EVERYTHING, CAMERA_ROLL_CHANCE, CAMERA_ROLL_MAX } from './session/look'
 import { idleParams } from './session/idle'
+import { createGestureState, dispatchGestures, noteDisturb, gesturesCalm } from './session/gestures'
 
 /** Relative loudness: self-calibrates between a quiet room and a sound system. */
 const DEFAULT_MAPPING: MappingName = 'relative'
@@ -331,7 +330,7 @@ function flashShutter(): void {
 // The three zones this used to carve the screen into — CAPTURE_BAND_FRACTION,
 // safeBottomInset() and zone() — are retired by docs/todo.md entry 52: a
 // single tap now saves and a double opens, anywhere on the screen, with no
-// region either belongs to. See dispatchTouches() below.
+// region either belongs to. See dispatchGestures() in session/gestures.ts.
 
 /** How many captures this session has already saved. Widens the counter's
  *  own padding past 99 on its own — docs/todo.md entry 26. */
@@ -747,7 +746,7 @@ async function main(): Promise<void> {
     if (
       !shouldRaiseCamera({
         shake: true,
-        fingersDown: fingersOnPicture > 0,
+        fingersDown: gestures.fingersOnPicture > 0,
         panelOpen: document.querySelector('.hud-scrim.open') !== null,
         cameraMode,
         live: cameraSource?.isLive() ?? false,
@@ -1016,7 +1015,7 @@ async function main(): Promise<void> {
   // shape, reconciled against entry 41's three zones. Entry 50 overturns
   // both: with the panel now owning only the middle third, a threshold in
   // the other two zones was protecting nothing, and every zone answers a
-  // contact immediately now — see dispatchTouches() below.
+  // contact immediately now — see dispatchGestures() in session/gestures.ts.
   const isChip = (t: EventTarget | null): boolean => t instanceof Element && t.closest('.hud-chip') !== null
 
   const touchField = createTouchField()
@@ -1026,29 +1025,12 @@ async function main(): Promise<void> {
   // a finger permanently down, holding `touchAnyDown` true for ever and
   // parking the tap recogniser below mid-gesture.
   const hover = createHoverState()
-  /**
-   * Which live contacts came from a mouse — docs/todo.md entry 117.
-   *
-   * The touch field carries no `pointerType`, and deliberately: it is a field
-   * of contacts, and what hardware made one is this file's question. A set
-   * keyed by pointer id is enough, and it is read in `dispatchTouches` rather
-   * than acted on in the listener for a reason worth stating — arming in the
-   * listener would arm *before* the same event reached the dispatch, and the
-   * dispatch would then see an armed mode and shoot on the very click that
-   * armed it. One click cannot be both.
-   */
-  const mousePointers = new Set<number>()
-
-  // Contact ids for the geometric emitter's pool (scene.ts) — docs/todo.md
-  // entry 57. `touchField`'s own id is a *pointer* id, which the platform
-  // can reuse across two separate taps of the same finger (lift, then tap
-  // again); minted fresh on every qualifying `down` instead, so a pointer
-  // id being reused never reads as "the same contact continuing" to the
-  // emitter pool. Cleared on `up`/`cancel` — the id itself lives on inside
-  // scene.ts's pool for as long as that emitter's afterlife runs, but
-  // nothing here needs to remember it once the pointer is gone.
-  let nextContactId = 0
-  const contactIdFor = new Map<number, number>()
+  // The gesture recogniser's own memory between frames — docs/todo.md
+  // entries 41, 50, 67, 103, 115, 117, 125, 141 and 146 — moved to
+  // session/gestures.ts so it is drivable from Node; see that file's own
+  // field comments (mousePointers, contactIdFor and the rest) for what each
+  // part of this remembers and why.
+  const gestures = createGestureState()
 
   document.addEventListener('pointerdown', (e) => {
     const rect = canvas.getBoundingClientRect()
@@ -1061,7 +1043,7 @@ async function main(): Promise<void> {
     // the menu by accident, and middle click did the same.
     const action = pointerAction(e)
     if (action === 'ignore') return
-    if (e.pointerType === 'mouse') mousePointers.add(e.pointerId)
+    if (e.pointerType === 'mouse') gestures.mousePointers.add(e.pointerId)
     if (action === 'menu') {
       // A chip or the gate keeps the browser's own context menu — the
       // picture is the only surface this entry claims. `isChip` is the same
@@ -1077,7 +1059,7 @@ async function main(): Promise<void> {
       // took its `panel.open()` out, so this is a plain disarm and the
       // `panel.open()` below is the right click's own doing.
       if (cameraMode) exitCameraMode()
-      lastTap = null
+      gestures.lastTap = null
       panel.open()
       return
     }
@@ -1124,11 +1106,11 @@ async function main(): Promise<void> {
   window.addEventListener('blur', () => hoverLeft(hover))
   document.addEventListener('pointerup', (e) => {
     touchField.up(e.pointerId)
-    mousePointers.delete(e.pointerId)
+    gestures.mousePointers.delete(e.pointerId)
   })
   document.addEventListener('pointercancel', (e) => {
     touchField.cancel(e.pointerId)
-    mousePointers.delete(e.pointerId)
+    gestures.mousePointers.delete(e.pointerId)
   })
   // A lost capture (another element or the browser chrome stealing it
   // mid-drag) is not followed by pointerup or pointercancel on this target
@@ -1141,499 +1123,6 @@ async function main(): Promise<void> {
   // right click on a `.hud-chip`, on the gate, or anywhere else keeps the
   // browser's menu, which is the escape hatch for anyone who needs it.
   canvas.addEventListener('contextmenu', (e) => e.preventDefault())
-
-  // A tap plays; only a double opens the panel — docs/todo.md entry 103,
-  // replacing entry 52's tap-saves-a-frame design. Entry 87 built a
-  // deliberate two-tap camera shutter and it landed invisibly, because
-  // entry 52's ordinary tap already wrote a PNG of its own 400ms later —
-  // arming camera mode only changed *when* the save happened, never
-  // *whether* one did. The two reports this entry answers — an ordinary
-  // tap taking a photo, and the two-shot camera looking unbuilt — turn out
-  // to be the same fault: remove the save from a single tap and both close
-  // at once. Play is untouched by any of this: entry 50's emitter still
-  // fires on the raw `down`, immediately, never waiting on or cancelled by
-  // what a tap resolves to.
-  //
-  // The double still needs telling apart from two unrelated singles, so the
-  // window and radius below survive entry 52 even though what they gate no
-  // longer includes a save: a second qualifying tap arriving within
-  // TAP_RESOLVE_MS of the first, and close enough to it, opens the panel;
-  // if none arrives, the first tap simply did what a tap already does
-  // elsewhere — play — and nothing further happens.
-  //
-  // docs/todo.md entry 67: recognised on the second tap's *down*, not its
-  // *up*, and the window runs from the first tap's down rather than its
-  // release — down-to-down, the way every platform's own double-tap
-  // detector measures it, and the way a hand actually experiences "how fast
-  // did I tap": a deliberate double with real (non-zero) contact durations
-  // used to lose that time out of a budget measured release-to-release,
-  // which nobody's idea of tapping speed includes. 400ms (up from 280) buys
-  // back the frame-quantisation dispatchTouches' once-per-frame draining
-  // adds on both ends, without reaching the ~500ms where two genuinely
-  // separate taps start pairing by accident.
-  const TAP_RESOLVE_MS = 400
-  const DOUBLE_TAP_RADIUS_PX = 30
-
-  /**
-   * How long a still contact must be held before the camera arms — docs/todo.md
-   * entries 115 and 125.
-   *
-   * Entry 115 put the *menu* here and the camera on the double tap; entry 125
-   * swapped them back on Victor's instruction, which agrees with the choice he
-   * made first ("hold picture → armed (glyph appears) · tap picture → one
-   * photo"). Renamed with the swap: a constant named for the menu that arms a
-   * camera is exactly the sort of name that survives into being read as a
-   * decision.
-   *
-   * Derived rather than picked: `emitter.ts` saturates its charge at
-   * `CHARGE_TIME`, so **past that point a hold already buys nothing** — it is
-   * gesture space the emitter's own design has vacated — and the extra second
-   * leaves a full-charge hold a moment to sit at full charge before the menu
-   * claims it. Written against the constant so it moves if that moves.
-   *
-   * The known cost, stated rather than hidden: a deliberate long hold to
-   * fatten rings now ends in the camera arming at 3.5s. That is a real loss to
-   * the play gesture and there is no version of hold-does-something without
-   * it.
-   */
-  const HOLD_ARM_S = CHARGE_TIME + 1.0
-  /**
-   * A hold that travels is never an arm — it is entry 50's fling, and turning
-   * that into a mode would take the loudest emitter gesture away from the
-   * picture. Measured against the contact's *original* touchdown point rather
-   * than the previous frame's, so a slow drift out and back cannot creep past
-   * it unnoticed.
-   *
-   * **This test cannot see a shake, and that is what entry 125 exists for.**
-   * It measures the finger's travel *relative to the screen*, and during a
-   * shake the finger and the screen move together — so a thumb resting on a
-   * violently shaken phone travels approximately zero and satisfies this
-   * perfectly. The 24px is not a weak guard against that; it is not a guard
-   * against it at all. The calm gate below is.
-   */
-  const HOLD_ARM_SLOP_PX = 24
-
-  /**
-   * How disturbed the phone may be before gestures stop being answered —
-   * docs/todo.md entry 125. Victor: "shake is getting good, we don't want the
-   * menu coming up accidentally."
-   *
-   * 0.35 because `shake.ts` records its own measurement in a comment —
-   * "walking peaks at disturb 0.15, well under LEVEL" — so this clears an
-   * ordinary gait by better than twice while a deliberate shake, which
-   * saturates `disturb` near 1.0, is blocked decisively. Derived from a number
-   * already in the file rather than picked.
-   */
-  const GESTURE_CALM_MAX = 0.35
-  /**
-   * How long the gate stays shut after `disturb` was last above the line.
-   * Long enough that the dying swing of a shake cannot re-open it between two
-   * beats of the same gesture, short enough that the menu is there the moment
-   * the phone stops.
-   */
-  const GESTURE_SETTLE_S = 0.4
-  /** When `disturb` last exceeded `GESTURE_CALM_MAX`. `-Infinity` until it
-   *  ever has, so a phone that has never moved — and a machine with no
-   *  accelerometer, which reports `disturb` 0 for ever — is never gated. */
-  let lastDisturbedAt = -Infinity
-  /**
-   * Whether a deliberate gesture should be answered right now.
-   *
-   * Guards the menu *and* the arm, not only the one that was reported: a
-   * double tap is harder to trigger by accident than a hold, but two thumb
-   * bounces inside entry 67's window during a hard shake are not impossible,
-   * and without this the accident would simply move from the menu to the
-   * camera — where it costs a photograph rather than a panel.
-   */
-  const gesturesCalm = (now: number): boolean => now - lastDisturbedAt >= GESTURE_SETTLE_S
-  /** The contact that has already opened the menu this gesture, so a finger
-   *  still resting on the glass at 3.6s does not reopen it every frame. */
-  let holdOpenedBy: number | null = null
-  /** docs/todo.md entry 141 — the contact currently holding the
-   *  centre-anchored emitter, if any. Belongs to it for its whole life, the
-   *  same exclusive-claim shape `fsBlocking` already has: no ring, no
-   *  drag-trail, no tap or double, no hold-arming the camera. */
-  let emitterDragId: number | null = null
-  /** docs/todo.md entry 141 — within this many CSS pixels of the emitter on
-   *  a `down` picks it up. Smaller than a chip (48px) so it is deliberate,
-   *  larger than the centre ring (0.02 uv, about 7px) so it is findable. */
-  const EMITTER_PICK_PX = 36
-  /** docs/todo.md entry 146 — which Chorus node `emitterDragId` is holding,
-   *  when it is Chorus's several nodes rather than the single anchor:
-   *  `null` for every other view and for the anchor itself. One shared
-   *  claim variable (`emitterDragId`) plus this index is simpler than a
-   *  second parallel `Map`, because at most one contact-to-drag claim is
-   *  ever open per contact and `emitterDragId` already tracks that. */
-  let emitterDragNodeIndex: number | null = null
-  /** The longest still contact on the glass right now, in seconds — for the
-   *  `?debug` readout only. Recomputed each frame in `dispatchTouches`; 0
-   *  when nothing qualifies. */
-  let longestStillHold = 0
-  /** How many non-chip fingers are on the picture — docs/todo.md entry 121's
-   *  press-and-shake. Recomputed each frame in `dispatchTouches` and read in
-   *  the frame loop's own shake branch, which is a different function, so it
-   *  lives out here rather than in either. */
-  let fingersOnPicture = 0
-  let lastSaveAt = -Infinity
-  // docs/todo.md entry 72: camera mode's own rate limit. Every tap in here
-  // is a deliberate shutter press, not one entry 52 needed protecting from
-  // — this exists only to stop a genuinely double-tapped shutter from
-  // writing the same frame twice.
-  const CAMERA_SAVE_RATE_LIMIT_MS = 300
-
-  // docs/todo.md entry 103: one remembered tap, not a list of pending
-  // ones — with no save left to schedule, there is nothing to commit and
-  // therefore no per-tap timer to hold, only a position and a down-time to
-  // compare the next qualifying down against. `pointerId` is kept so that
-  // *that same contact's* own later drag or cancel can forget it — a
-  // gesture that turns out not to have been a tap at all should not still
-  // be sitting here, eligible to pair with some later, unrelated tap into a
-  // spurious double.
-  interface LastTap {
-    x: number
-    y: number
-    t: number
-    pointerId: number
-  }
-  let lastTap: LastTap | null = null
-
-  const resolveTapDown = (pointerId: number, clientX: number, clientY: number): void => {
-    if (
-      lastTap !== null &&
-      performance.now() - lastTap.t <= TAP_RESOLVE_MS &&
-      Math.hypot(clientX - lastTap.x, clientY - lastTap.y) <= DOUBLE_TAP_RADIUS_PX
-    ) {
-      lastTap = null
-      // docs/todo.md entry 125 — the menu is the double tap again, and the
-      // camera moved to the still hold. Victor: "require double tap for
-      // menu, shake is getting good, we don't want the menu coming up
-      // accidentally." That agrees with the choice he made first, before
-      // entry 115's reading of a middle instruction moved it.
-      //
-      // Gated on calm for the same reason the hold is: two thumb bounces
-      // inside entry 67's window during a hard shake are not impossible,
-      // and a menu opening mid-shake is the report this fixes.
-      if (gesturesCalm(performance.now() / 1000)) panel.open()
-      return
-    }
-    lastTap = { x: clientX, y: clientY, t: performance.now(), pointerId }
-  }
-
-  /** Called from the matching contact's `up` once it is known whether that
-   *  contact travelled past `TAP_SLOP_PX`, and from a `cancel` — a drag or a
-   *  cancelled contact was never a tap, and forgetting it here is what keeps
-   *  it from later pairing with an unrelated tap into a double it never
-   *  earned. A no-op if that down already resolved as a double (`lastTap` is
-   *  gone by then), belongs to a different contact, or was never remembered
-   *  to begin with (a chip, the HUD, the gate). */
-  const cancelPendingTap = (pointerId: number): void => {
-    if (lastTap !== null && lastTap.pointerId === pointerId) lastTap = null
-  }
-
-  /**
-   * The tap/hold-vs-drag decision for the emitter, and the single/double
-   * tap dispatch — docs/todo.md entries 41, 33, 48, 49, 50, 52 and 57.
-   * Called once per rendered frame from frame() below, which is what
-   * "sampled, not callback-driven" (touches.ts's own file comment) means in
-   * practice: every consumer of the field, this dispatch included, reads it
-   * on the same clock the picture itself redraws on rather than keeping its
-   * own timers.
-   */
-  const dispatchTouches = (now: number): void => {
-    const hudOpen = document.querySelector('.hud-scrim.open') !== null
-    // docs/todo.md entry 80 — fullscreen has right of way, rank 1 of the
-    // four claimants on a tap (fullscreen, camera mode, menu, play). One
-    // tap, not a mode: this is recomputed fresh every call from the same
-    // two facts entry 66 already derives `fullscreenStatus().want` from and
-    // the DOM's own `document.fullscreenElement`, so there is no separate
-    // state to fall out of sync or get stuck in — the moment fullscreen is
-    // back, this is false again on its own.
-    const fsBlocking = fullscreenStatus().want && !document.fullscreenElement
-
-    // Drained once, read twice below — minting/clearing contact ids first,
-    // so the sample pass that follows always has an id ready for a contact
-    // that began on this exact frame. events() only ever drains in the
-    // order things happened, so a down always precedes any up for the same
-    // id within one call.
-    const events = touchField.events()
-    for (const e of events) {
-      if (e.kind === 'down') {
-        if (!e.onChip) contactIdFor.set(e.id, nextContactId++)
-        continue
-      }
-      contactIdFor.delete(e.id)
-    }
-
-    // docs/todo.md entry 50: no threshold, every zone — a contact emits the
-    // instant it begins, wherever it lands, as long as it isn't a chip's
-    // own tap and the HUD isn't covering the picture. Entry 41's own
-    // zone-and-threshold logic for what a *release* does (save, open the
-    // panel) is untouched, further down — this is a second, independent
-    // thing every contact does, not a replacement for that dispatch.
-    const active: { contactId: number; x: number; y: number; speed: number }[] = []
-    // Any `.hud-chip` contact never reaches either stream below — a chip's
-    // own tap is that chip's gesture, not one that reaches the picture
-    // underneath. Also inert while the HUD is open — a HUD control's own
-    // drag already stopPropagation()s before it ever reaches this field,
-    // but a tap on the scrim itself (closing the panel) would not, and the
-    // picture is hidden behind the panel at that moment regardless.
-    //
-    // Entry 48's own capture-band exclusion is gone along with the zone it
-    // was defined against (entry 52): the touch stream's own contribution
-    // can now land in a saved frame exactly as entry 50 already made the
-    // geometric emitter's ring do, for the same reason stated there — it is
-    // picture, not UI, and a save can now happen from any tap rather than
-    // only ones landing in a fixed band this file no longer has a way to
-    // name. **Mine**, since entry 52's own text does not mention the touch
-    // stream at all; leaving the old exclusion in would have needed a
-    // "was this the tap that is about to save" fact that is not knowable
-    // until 280ms after the fact, which the render loop cannot wait for.
-    let streamAnyDown = false
-    let streamMaxSpeed = 0
-    // docs/todo.md entry 121 — recounted each frame. Entry 67 kept this for
-    // its two-finger opener and entry 125 deleted both together, correctly:
-    // it had no reader left. It has one again, and a different one — the
-    // question now is "is anybody touching the picture", not "are there
-    // exactly two".
-    let nonChipDown = 0
-    longestStillHold = 0
-    for (const t of touchField.sample(now)) {
-      const speed = Math.hypot(t.vx, t.vy)
-      // docs/todo.md entry 80: a non-chip contact this file is currently
-      // spending on restoring fullscreen counts toward nothing else here —
-      // not the emitter, not the atmospheric stream, not the two-finger
-      // recogniser below — "does nothing else" means nothing else, not
-      // merely "no ring". A chip contact is unaffected, exactly as Decided
-      // states — the `!t.onChip` guard here is what keeps that true.
-      if (!t.onChip && fsBlocking) continue
-      // docs/todo.md entry 141 — the same total exclusion entry 80's own
-      // comment above states for a fullscreen-blocked contact, for the
-      // contact currently holding the emitter: not the ring, not the
-      // atmospheric stream, not the hold-to-arm recogniser below. Its own
-      // live position is still forwarded, every frame, which is what "no
-      // lag, no spring" while held actually requires — a `down`-time
-      // position alone would leave the emitter wherever the finger first
-      // landed rather than following it.
-      if (t.id === emitterDragId) {
-        if (emitterDragNodeIndex !== null) {
-          visualiser.setChorusNodeDrag(emitterDragNodeIndex, { x: t.x, y: t.y })
-        } else {
-          visualiser.setEmitterDrag({ x: t.x, y: t.y })
-        }
-        continue
-      }
-      if (!t.onChip) nonChipDown++
-      if (!t.onChip && !hudOpen) {
-        streamAnyDown = true
-        streamMaxSpeed = Math.max(streamMaxSpeed, speed)
-      }
-      if (t.onChip || hudOpen) continue
-      // docs/todo.md entry 115 — a still hold opens the menu. Checked here,
-      // in the per-frame contact loop, because "has this finger been down
-      // for three and a half seconds without moving" is a question about
-      // elapsed time that no event can answer: the `down` is too early and
-      // the `up` is too late. `downFor` and `downClientX`/`Y` are already on
-      // the sample, so this needs no new state beyond remembering which
-      // contact has already fired.
-      if (Math.hypot(t.clientX - t.downClientX, t.clientY - t.downClientY) <= HOLD_ARM_SLOP_PX) {
-        longestStillHold = Math.max(longestStillHold, t.downFor)
-      }
-      if (
-        holdOpenedBy === null &&
-        t.downFor >= HOLD_ARM_S &&
-        Math.hypot(t.clientX - t.downClientX, t.clientY - t.downClientY) <= HOLD_ARM_SLOP_PX &&
-        // docs/todo.md entry 125 — the stillness test above cannot see a
-        // shake, because the finger and the screen move together. This is
-        // what actually stops a thumb on a shaken phone from arming.
-        gesturesCalm(now)
-      ) {
-        holdOpenedBy = t.id
-        // A tap still waiting to pair into a double must not survive the
-        // gesture that consumed this contact.
-        lastTap = null
-        enterCameraMode()
-      }
-      const contactId = contactIdFor.get(t.id)
-      // Absent only for a chip contact (never minted one) reaching here by
-      // a stale id, which should not happen given the exclusion above —
-      // defensive rather than load-bearing.
-      if (contactId === undefined) continue
-      active.push({ contactId, x: t.x, y: t.y, speed })
-    }
-    fingersOnPicture = nonChipDown
-    visualiser.setTouches(active)
-
-    // docs/todo.md entry 112 — asked here rather than at the event, because
-    // "has the cursor been parked" is a question about elapsed time and
-    // nothing answers it until a frame goes by. `updateHover` is what
-    // applies HOVER_QUIET; this file only forwards its verdict.
-    const cursor = updateHover(hover, now)
-    visualiser.setHover(cursor.x, cursor.y, cursor.active, cursor.speed, cursor.presence)
-
-    // Defensive rather than load-bearing: dispatchTouches only ever runs
-    // after Start (frame() is not scheduled before it), so the gate should
-    // already be gone by the time a tap can reach here — kept in case a
-    // fade is still mid-flight, the same guard the zone dispatch this
-    // replaced already carried.
-    const gate = document.getElementById('gate')
-    const gateShowing = gate != null && !gate.hidden
-
-    let streamBegan = false
-    for (const e of events) {
-      if (e.kind === 'down') {
-        // docs/todo.md entry 80 — checked first, before every other
-        // claimant on this tap: the emitter and the camera shutter both
-        // fire on `down` (entries 50 and 72/87), so waiting for this
-        // contact's own `up` — where the retry that actually re-requests
-        // fullscreen already lives, entry 62's own choice — would let a
-        // ring already be drawn or a photo already written before the
-        // request even goes out. `e.onChip` is checked first of all,
-        // inside the combined condition below, so the chip stays unaffected.
-        if (!e.onChip && !hudOpen && fsBlocking) continue
-        if (!e.onChip && !hudOpen) streamBegan = true
-        if (e.onChip || hudOpen || gateShowing) continue
-        // docs/todo.md entry 87: one shot, then done. Entry 78's two-finger
-        // exit does not exist to retire a second time — arming ends at the
-        // first qualifying tap regardless, so there is no persisted state
-        // left to need an exit gesture for. The shutter is instant — no
-        // TAP_RESOLVE_MS wait, no drag check, no pending-tap bookkeeping —
-        // because outside this mode that wait exists solely to learn
-        // whether a second tap is coming to open the menu, and in here the
-        // menu cannot open at all. Fires on this tap's own down.
-        if (cameraMode) {
-          if (performance.now() - lastSaveAt >= CAMERA_SAVE_RATE_LIMIT_MS) {
-            lastSaveAt = performance.now()
-            saveCapture(visualiser)
-            flashShutter()
-          }
-          // Exits unconditionally, even the rare frame where the rate
-          // limit above suppressed the actual save — arming already
-          // consumed this tap, and a stray extra frame stuck in the
-          // dispatch is a worse failure than a shot occasionally lost to a
-          // limit built for the ordinary tap-to-save path, not this one.
-          exitCameraMode()
-          continue
-        }
-        // docs/todo.md entry 141 — a fifth claimant, checked here: after
-        // fullscreen and after camera mode (a tap while armed is always a
-        // photo, entirely unaffected by this), before a mouse's own
-        // left-click-arms-camera below and before an ordinary tap or drag
-        // is resolved at all. `e.x`/`e.y` are already shader-uv — every
-        // `TouchFieldEvent` carries them, the same pair `resolveTapDown`'s
-        // own caller further down reaches for by client coordinates instead
-        // only because that path needs to remember where the tap itself
-        // was, not to hit-test against anything.
-        {
-          const rect = canvas.getBoundingClientRect()
-          const radiusUv = EMITTER_PICK_PX / Math.min(rect.width, rect.height)
-          if (visualiser.hitTestEmitter(e.x, e.y, radiusUv)) {
-            emitterDragId = e.id
-            emitterDragNodeIndex = null
-            visualiser.setEmitterDrag({ x: e.x, y: e.y })
-            continue
-          }
-          // docs/todo.md entry 146 — the same claim, for whichever of
-          // Chorus's several nodes (if any) the touch landed on. Checked
-          // second, after the anchor itself: `hitTestEmitter` is not gated
-          // on the mounted view, so a touch within `radiusUv` of the centre
-          // still moves the whole constellation (same as gravity's own bob
-          // does), and only a touch nearer to one particular node than to
-          // the centre falls through to claim that node instead.
-          // `hitTestChorusNode` itself answers `null` whenever Chorus is not
-          // the mounted geometric view, so this is a no-op everywhere else.
-          const nodeIndex = visualiser.hitTestChorusNode(e.x, e.y, radiusUv)
-          if (nodeIndex !== null) {
-            emitterDragId = e.id
-            emitterDragNodeIndex = nodeIndex
-            visualiser.setChorusNodeDrag(nodeIndex, { x: e.x, y: e.y })
-            continue
-          }
-        }
-        // docs/todo.md entry 125 deleted entry 67's two-finger opener that
-        // stood here. It fired the instant the second finger landed — no
-        // duration, no stillness, no travel test of any kind — and two
-        // fingers gripping a phone that is being shaken is not an edge case,
-        // it is how a phone is held. Deleted rather than gated, as the direct
-        // reading of "require double tap for menu": entry 115 kept it on the
-        // argument that removing a working way in while moving the primary
-        // one risks leaving none, and that no longer applies now the primary
-        // is moving *to* the gesture people already know.
-        // docs/todo.md entry 117 — a mouse arms on a single left click,
-        // where a finger needs a 3.5s still hold. The difference is the
-        // hardware: a finger cannot have the single tap, because the emitter
-        // fires on every `down`, so every touch of the picture would arm and
-        // the touch after it would shoot. A mouse does not have that problem,
-        // because it has a second button for the menu and hover for play — so
-        // the click is free.
-        //
-        // (This said "where a finger needs a double tap" until entry 125 put
-        // the menu back on the double tap and arming on the hold. The
-        // reasoning is unchanged; only which finger gesture it contrasts
-        // with moved.)
-        //
-        // Reached only when `cameraMode` is false: the branch above already
-        // took the armed case and shot. That is what keeps one click from
-        // arming and shooting at once.
-        if (mousePointers.has(e.id)) {
-          enterCameraMode()
-          continue
-        }
-        // Recognised on this tap's own `down`, not its `up` — see
-        // resolveTapDown's own comment for why. `e.clientX`/`e.clientY`
-        // equal `e.downClientX`/`e.downClientY` for a `down` event; using
-        // the former reads as "where this tap is", which is what it is.
-        resolveTapDown(e.id, e.clientX, e.clientY)
-        continue
-      }
-      // docs/todo.md entry 141 — up or cancel, the same one line: the claim
-      // ends and the emitter stays exactly where this contact leaves it.
-      // `setEmitterDrag(null)` is what tells scene.ts to anchor the spring
-      // there (or, with `grav` off, to simply hold the picture there) —
-      // checked first of everything below, since a dragging contact was
-      // never eligible for a tap, a double or the hold-arm gesture and has
-      // nothing there to unwind.
-      if (emitterDragId === e.id) {
-        emitterDragId = null
-        if (emitterDragNodeIndex !== null) {
-          visualiser.setChorusNodeDrag(emitterDragNodeIndex, null)
-          emitterDragNodeIndex = null
-        } else {
-          visualiser.setEmitterDrag(null)
-        }
-        continue
-      }
-      // A cancelled contact (pointercancel, lostpointercapture) is never a
-      // tap — only a clean release can be, exactly as before this entry —
-      // but its own `down` may already have remembered itself as a
-      // candidate to pair into a double (docs/todo.md entry 67: resolution
-      // now begins at `down`, before it is knowable whether the contact
-      // will end cleanly). Forget it unconditionally rather than let a
-      // contact the platform itself gave up on still be eligible to pair
-      // with some later, unrelated tap — a no-op for a chip/HUD/gate
-      // contact, which never had a remembered tap to begin with.
-      if (e.kind === 'cancel') {
-        cancelPendingTap(e.id)
-        if (holdOpenedBy === e.id) holdOpenedBy = null
-        continue
-      }
-      // The tap-versus-drag distinction entry 50 explicitly names as not
-      // loosened: a release far from where the contact began is a
-      // completed drag, not a tap. Forget whatever remembered tap its own
-      // `down` may have started, rather than let a gesture that turned out
-      // not to be a tap at all pair with a later one into a spurious double.
-      if (Math.hypot(e.clientX - e.downClientX, e.clientY - e.downClientY) > TAP_SLOP_PX) {
-        cancelPendingTap(e.id)
-      }
-      // docs/todo.md entry 115 — the hold that opened the menu has ended, so
-      // the next one is free to open it again. Cleared on the release rather
-      // than when the menu closes: it is a property of the *contact*, and a
-      // finger still resting on the glass after the menu is dismissed should
-      // not immediately reopen it.
-      if (holdOpenedBy === e.id) holdOpenedBy = null
-    }
-
-    visualiser.setTouchStream(streamBegan, streamAnyDown, streamMaxSpeed)
-  }
 
   // The way back into fullscreen once it has been lost — docs/todo.md entry
   // 19. Shown only for `exited`/`refused`, never `active` (nothing to offer),
@@ -1706,13 +1195,6 @@ async function main(): Promise<void> {
       // the countdown rather than expiring it while backgrounded — entry
       // 109 leaves that question open, so freezing is the conservative
       // reading rather than a considered answer to it.
-      // docs/todo.md entry 125 — the calm gate's own clock, ticked from the
-      // `disturb` this file already samples every frame for the colour bias
-      // and the RGB slip. No new sensor path and no second opinion about how
-      // much the phone is moving, which is the drift entry 111 argued
-      // against.
-      if (latestShake.disturb > GESTURE_CALM_MAX) lastDisturbedAt = performance.now() / 1000
-
       if (cameraMode) {
         const arm = updateCameraArm(
           cameraArmState,
@@ -1781,7 +1263,35 @@ async function main(): Promise<void> {
         latestShake.disturb,
         latestShake.busyness,
       )
-      dispatchTouches(performance.now() / 1000)
+      // docs/todo.md entry 125 — the calm gate's own clock, ticked from the
+      // `disturb` this file already samples every frame for the colour bias
+      // and the RGB slip. No new sensor path and no second opinion about how
+      // much the phone is moving, which is the drift entry 111 argued
+      // against.
+      noteDisturb(gestures, latestShake.disturb, performance.now() / 1000)
+      dispatchGestures(gestures, performance.now() / 1000, {
+        field: touchField,
+        hover,
+        visualiser,
+        shellOpen: document.querySelector('.hud-scrim.open') !== null,
+        gateShowing: !gate.hidden,
+        fullscreenBlocking: fullscreenStatus().want && !document.fullscreenElement,
+        canvas,
+        camera: {
+          get armed() {
+            return cameraMode
+          },
+          arm: enterCameraMode,
+          shoot: (write) => {
+            if (write) {
+              saveCapture(visualiser)
+              flashShutter()
+            }
+            exitCameraMode()
+          },
+        },
+        openShell: () => panel.open(),
+      })
       // The discrete gesture stands down while the panel is open — a
       // shuffle rewrites the values someone currently has a finger on, the
       // same fault as a control lying about its state — but the tumble
@@ -1875,12 +1385,12 @@ async function main(): Promise<void> {
         // opening the menu can be told from one that is not being seen.
         arm: {
           armed: cameraMode,
-          hold: longestStillHold,
+          hold: gestures.longestStillHold,
           // docs/todo.md entry 125 — "the menu won't open" and "the double
           // tap wasn't recognised" are the same report from outside, and this
           // map has changed twice in two days.
-          blocked: !gesturesCalm(performance.now() / 1000),
-          sinceDisturbed: Math.min(99, performance.now() / 1000 - lastDisturbedAt),
+          blocked: !gesturesCalm(gestures, performance.now() / 1000),
+          sinceDisturbed: Math.min(99, performance.now() / 1000 - gestures.lastDisturbedAt),
         },
         // docs/todo.md entry 137 — the whole look, live, as one copyable
         // string. Recomputed every visible frame like everything else on

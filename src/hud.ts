@@ -1394,6 +1394,26 @@ export function createHud(prefs: Prefs, handlers: Handlers, debugFromUrl = false
     close: () => setOpen(false),
 
     adopt(next, colourRampS) {
+      // Re-read the camera band's displayed level from `prefs` on every
+      // adopt, not only on one that names `passthrough` below.
+      //
+      // `camShown` is the only piece of this panel's state that does not
+      // live in `prefs` — it has to exist, because during a drag the band
+      // runs ahead of what the camera has actually granted — and until now
+      // the single thing that kept it honest against a change made
+      // elsewhere was the `next.passthrough` branch at the bottom of this
+      // method. The session (session/session.ts) reports a change it made
+      // itself through `Shell.lookChanged()`, which carries no patch: it
+      // has already written `prefs` and only needs the panel to catch up.
+      // With an empty `next`, that branch never runs, so a shake that
+      // raised the camera while the HUD was shut left this field holding
+      // the previous level — and the *next* touch on the band would settle
+      // with that stale number, which at 0 quietly closes a live stream.
+      // Reading `prefs` here is what a no-argument "the look changed" can
+      // mean at all. A drag is unaffected: `adopt()` is never called
+      // mid-drag, and the band's own settle still writes `camShown` from
+      // what was actually granted.
+      camShown = prefs.passthrough
       if (next.geometricView) {
         prefs.geometricView = next.geometricView
         handlers.onGeometricView(prefs.geometricView)

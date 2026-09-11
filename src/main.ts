@@ -482,6 +482,10 @@ async function main(): Promise<void> {
     autopilot: !autoOverrideOff,
     dnaBase: `${window.location.origin}${window.location.pathname}`,
     shell,
+    // Read live, not captured: `waitForStart()` resolves and the gate then
+    // fades for 600ms before `#gate` is actually hidden, so for that window
+    // a contact is still the gate's and not the picture's.
+    gateShowing: () => !gate.hidden,
     canvas,
   })
 
@@ -504,8 +508,17 @@ async function main(): Promise<void> {
     onPassthrough: session.setPassthrough,
     onSolo: session.solo,
     onUnsolo: session.unsolo,
-    // apply() with source 'manual' already suspends the director.
-    onManualChange: () => {},
+    // Every other handler above reaches `session.apply()` with source
+    // 'manual', which suspends the director on its own — so this looks like
+    // it should be a no-op, and was one until the camera opacity band
+    // turned out not to go through any of them. That band calls hud.ts's
+    // `manual()` directly from its own drag and settles later through
+    // `onPassthrough`, so this is the only thing standing between a drag on
+    // it and the autopilot walking the views out from under the finger. An
+    // empty patch exercises the suspend path and nothing else: no field is
+    // set, so no visualiser call is made, and `persist: false` keeps a
+    // per-frame drag off `localStorage`.
+    onManualChange: () => session.apply({}, { rampS: 0, source: 'manual', persist: false }),
   }, new URLSearchParams(window.location.search).has('debug'))
 
   // The powder easter egg — docs/todo.md entry 46. Wired here, before Start,

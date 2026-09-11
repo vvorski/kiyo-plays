@@ -87,6 +87,16 @@ export interface SessionOptions {
   /** `origin + pathname` for the readout's DNA line — the page's, not ours. */
   dnaBase: string
   shell: Shell
+  /**
+   * Whether the page's start gate is still covering the picture, asked once
+   * a frame. A predicate rather than a flag because the answer changes
+   * *after* `start()`: `waitForStart()` resolves, then permission-gate.ts
+   * fades `#gate` out over 600ms before hiding it, and for that whole
+   * window a contact is landing on the gate rather than on the picture.
+   * The gate is the page's element and this is the page's question; the
+   * session only forwards the answer to the recogniser.
+   */
+  gateShowing: () => boolean
   /** The picture's element, for `getBoundingClientRect()` and the context
    *  menu suppression. The one DOM handle the session holds. */
   canvas: {
@@ -512,10 +522,14 @@ export function createSession(options: SessionOptions): Session {
    * which only a live user gesture may open. The finger is that gesture.
    *
    * The raise goes through the same two calls `maybeRollCamera` makes —
-   * `setPassthrough` then `apply` — so the shell's own band,
-   * `prefs.passthrough` and `localStorage` all agree without a second path
-   * through any of them. A refused or absent camera needs nothing extra:
-   * `setPassthrough` already returns 0 and the band stays where it was.
+   * `setPassthrough` then `apply` — so `prefs.passthrough`, `localStorage`
+   * and whatever the shell draws all agree without a second path through
+   * any of them. That last clause is the one that needed work when the HUD
+   * stopped being told *what* changed: `Shell.lookChanged()` carries no
+   * patch, so hud.ts's camera band now re-reads `prefs.passthrough` on
+   * every adopt rather than only on one that names the field. A refused or
+   * absent camera needs nothing extra: `setPassthrough` already returns 0
+   * and the band follows it there.
    */
   function maybeRaiseCameraOnPress(): void {
     if (
@@ -865,10 +879,15 @@ export function createSession(options: SessionOptions): Session {
         hover,
         visualiser,
         shellOpen: shell.isOpen(),
-        // The gate is the page's, and by construction frame() is never
-        // scheduled before start() — so there is nothing left here for the
-        // recogniser's own defensive check to see.
-        gateShowing: false,
+        // The gate is the page's, and it is still up for a moment after
+        // `start()`: permission-gate.ts fades `#gate` out over 600ms and
+        // only then sets `hidden`. So this stays a live read of the page's
+        // own answer — exactly what `!gate.hidden` was before this file
+        // existed — rather than the constant `false` that "frame() never
+        // runs before start()" would seem to license. Every session passes
+        // through that window, and a contact landing in it belongs to the
+        // gate, not to the picture.
+        gateShowing: options.gateShowing(),
         fullscreenBlocking: fullscreenStatus().want && !document.fullscreenElement,
         canvas,
         camera: {

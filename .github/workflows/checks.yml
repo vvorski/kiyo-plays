@@ -61,3 +61,9 @@ jobs:
           pnpm probe:camera-arm
           pnpm probe:raise-camera
           pnpm probe:origin
+          # docs/plans/session-extraction.md — the pointer recogniser as pure
+          # state, and (probe:session) the whole session running under Node
+          # with no UI at all: the claim the extensibility refactor is built
+          # on, and nothing else here checks it.
+          pnpm probe:gestures
+          pnpm probe:session

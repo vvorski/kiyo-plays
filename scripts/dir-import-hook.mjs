@@ -13,6 +13,18 @@
  * restructuring the app's imports to suit the test harness. Neither is worth it
  * for twenty lines.
  *
+ * probe-session.ts (docs/plans/session-extraction.md) added the second half:
+ * views.ts imports every shader as `./foo.frag.glsl?raw`, a Vite asset-query
+ * import with no Node equivalent — `getFileProtocolModuleFormat` doesn't
+ * recognise `.glsl` and throws ERR_UNKNOWN_FILE_EXTENSION before the file is
+ * even read. `createSession` reaches views.ts through look.ts's shuffle
+ * ladder, so a session probe cannot avoid it the way probe-fullscreen and
+ * probe-gestures avoid it by staying clear of prefs.ts/look.ts. The `load`
+ * hook below treats any `.glsl` URL (the query is irrelevant — Vite's `?raw`
+ * is the only one this codebase uses, but nothing here depends on that)
+ * as plain text and hands back the same shape `?raw` produces under Vite:
+ * a module whose default export is the file's source string.
+ *
  * Register with: node --import ./scripts/dir-import-hook.mjs
  */
 
@@ -22,7 +34,7 @@ import { pathToFileURL } from 'node:url'
 register(
   'data:text/javascript,' +
     encodeURIComponent(`
-    import { existsSync } from 'node:fs'
+    import { existsSync, readFileSync } from 'node:fs'
     import { fileURLToPath } from 'node:url'
 
     // Directory imports resolve to an index; extensionless ones get an
@@ -45,6 +57,22 @@ register(
         }
         throw err
       }
+    }
+
+    // A shader source file, requested the way Vite's own \\\`?raw\\\` suffix
+    // requests it: as text, not as something Node's loader should try to
+    // parse. The query itself is never inspected — the only .glsl imports
+    // this codebase writes are \\\`?raw\\\`, and treating every .glsl URL as
+    // text regardless of its query is simpler than teaching this hook one
+    // more asset-query convention it would otherwise have to keep in step
+    // with views.ts.
+    export async function load(url, context, next) {
+      const pathname = new URL(url).pathname
+      if (pathname.endsWith('.glsl')) {
+        const source = readFileSync(fileURLToPath('file://' + pathname), 'utf8')
+        return { format: 'module', source: 'export default ' + JSON.stringify(source), shortCircuit: true }
+      }
+      return next(url, context)
     }
 `),
   pathToFileURL('./'),

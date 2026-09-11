@@ -186,6 +186,17 @@ Every HUD selector becomes a circle — including the addendum admitting that a
 circle you tap is not yet a circle you *turn*, which is a distinction the first
 attempt got away with and the second did not.
 
+### [docs/plans/extensibility-refactor.md](docs/plans/extensibility-refactor.md)
+The audit that found the project's four intended modules only two of, and the
+four-phase plan for closing the gap — a real `Session`, a `View` contract, a
+named home for `engine/`, and two layers made the documented design rather
+than an accident of `scene.ts`.
+
+### [docs/plans/session-extraction.md](docs/plans/session-extraction.md)
+Phase 1 of that plan: lifting the orchestration out of `main()` into
+`src/session/` behind a `Shell` port, so a different UI is a different
+`main.ts` rather than a fork.
+
 ---
 
 ## Running me
@@ -198,7 +209,7 @@ npm run deploy
 ```
 
 There are no unit tests in the usual sense. What there is instead is
-`scripts/`: **sixteen probes** that run headless, with no browser, no network
+`scripts/`: **thirty-one probes** that run headless, with no browser, no network
 and no room.
 
 ```bash

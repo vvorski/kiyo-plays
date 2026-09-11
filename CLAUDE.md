@@ -73,6 +73,10 @@ picture is right, and reviewing your own diff proves less than that.
   cap. That was not the shader; it was the probe's own synthetic spin being a
   constant regardless of amplitude, plus kicks that were not scaled by `dt`.
   Results that are suspiciously uniform are results to distrust.
+- Anything in `session/` gets a case in `scripts/probe-session.ts` or
+  `scripts/probe-gestures.ts` before it gets a finger. The session runs
+  under Node against `NULL_SHELL`; if a change needs the stub `document`
+  to grow, the session has reached for more of the page than it should.
 - **Compiling is not rendering, and rendering is not right.** `Fringe` compiled
   cleanly, passed a centre-pixel readback, and drew a lattice of dots instead of
   the hyperbolae it was supposed to. Its two-source sum factored into a

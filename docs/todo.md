@@ -5010,3 +5010,126 @@ own single-anchor path changes here); then the phone, specifically for frame
 time as Done-when requires. No HUD surface changes.
 
 **Hard stops** — prefs no · url no · capture no · dependency no.
+
+### 147. The view contract
+`status: ready` · added 2026-09-11 · build after this branch
+
+**Do** — give `View` an optional `handles` capability (`hitTest(x, y, r):
+number | null`, `drag(index, pos | null)`) and a declared list of the
+uniforms it reads, then move `hitTestEmitter`/`setEmitterDrag` and
+`hitTestChorusNode`/`setChorusNodeDrag` behind it, and move location/ambient
+light/sky/moon sampling out of `scene.ts` and behind the session, reaching
+the visualiser as values the way tilt already does.
+
+**Why** — `docs/plans/extensibility-refactor.md`'s audit found the layer and
+composition module a clean extension point for a new view but not for a view
+with its own draggable handles or its own sensor: `scene.ts:1747` tests the
+view's name to decide which drag path applies, and a shader referencing an
+undeclared uniform fails silently rather than at build time. Phase 2 of that
+plan closes both.
+
+**Decided**
+- Uniform declaration as a `readonly uniforms: readonly UniformName[]` list,
+  over a typed object → **Mine**, because the shader already declares each
+  uniform's type in its own `uniform` line; a second, parallel declaration of
+  type in TypeScript is a second thing to keep in step with the shader for no
+  benefit the string list doesn't already give (a build-time check that the
+  material only sets what the view declared, and vice versa).
+- Everything else per `docs/plans/extensibility-refactor.md`'s Phase 2
+  section — `hitTestEmitter`/`setEmitterDrag` and `hitTestChorusNode`/
+  `setChorusNodeDrag` become the anchor's and Chorus's cases of the same
+  `handles` shape; sensors leave `scene.ts` for the session (or `senses/`,
+  pending entry 148).
+
+**Lands in** — `src/views.ts` (the `View` type and its `handles`/`uniforms`
+fields), `src/scene.ts` (drop the view-name test at `:1747`, build the
+material from the declared uniform list, forward sensor values in), the
+sensor call sites currently in `scene.ts` move to `src/session/session.ts`
+or wherever entry 148 resolves to, `src/main.ts`'s `dispatchTouches` calls
+the declared `handles.hitTest`/`handles.drag` instead of the two
+view-specific function pairs.
+
+**Done when** — adding a view with its own draggable handles touches
+`views.ts` and one shader only, per the spec's own Phase 2 Done-when.
+Existing views (Circles', Chorus's, once entry 146 lands) behave
+byte-identically through the new `handles` path.
+
+**Verify** — `pnpm build`, `pnpm lint`, `pnpm probe:origin`, `pnpm
+probe:gestures`, `pnpm probe:session`; the probe page across every
+geometric view with a drag in each, side by side, at both phone sizes.
+
+**Hard stops** — prefs no · url no · capture no · dependency no.
+
+### 148. What `engine/` is called
+`status: blocked` · added 2026-09-11 · build after 147 — needs Victor's
+choice
+
+**Do** — rename `engine/` to match what it actually holds, once Phase 2 has
+moved the sensors that don't belong to audio analysis out of `scene.ts` and
+somewhere honest.
+
+**Why** — `docs/plans/extensibility-refactor.md`'s Phase 3: `engine/` was
+named when it held only audio capture and analysis. Posture, touches,
+hover, origin, celestial sampling, motion bias, RGB slip, camera arm and
+synth shake do not belong under a name that means "audio", and the spec
+declines to pick a name for Victor.
+
+**Decided** — nothing; this is the blocking fork itself.
+- **Option A: `inputs/` with `audio/` as a subdirectory.** Everything that
+  reaches the session from outside — audio and every sensor — sits under one
+  name, audio kept as a clearly-marked subset. Cost: every probe and
+  `main.ts`/`session/` import path that currently reads `engine/...` or
+  `engine/audio/...` changes; `engine/index.ts`'s barrel and file comment
+  are rewritten; `docs/how-it-works.md`'s tree is redrawn.
+- **Option B: keep `engine/` for audio, add a sibling `senses/`** for
+  posture, touches, hover, origin, celestial, motion bias, RGB slip, camera
+  arm, synth shake. Cost: two directories to explain instead of one, but no
+  import path for the existing audio pipeline changes, and `celestial.ts`
+  (which currently imports upward out of `engine/`) gets a home that matches
+  what it already is without touching audio's own tree.
+- Either way, `celestial.ts` stops importing upward, and
+  `engine/index.ts`'s file comment and `docs/how-it-works.md`'s tree are
+  rewritten to match.
+
+**Lands in** — `src/engine/` (rename or split), every import of it across
+`src/`, `scripts/probe-*.ts` that import from it, `docs/how-it-works.md`'s
+tree.
+
+**Done when** — the directory name and `docs/how-it-works.md`'s tree agree
+with what each file inside actually does; `celestial.ts` imports downward
+only.
+
+**Verify** — `pnpm build`, `pnpm lint`, the full probe set (import paths are
+the whole risk here); `grep -rn "from '\.\./engine" scripts/` and `grep -rn
+"from './engine" src/` both come back clean of anything that should have
+moved.
+
+**Hard stops** — prefs no · url no · capture no · dependency no.
+
+### 149. Two layers is the design
+`status: ready` · added 2026-09-11
+
+**Do** — write into `docs/how-it-works.md` and
+`docs/what-resolume-knew-about-layers.md` that composition is exactly two
+layers plus a camera, why, and what a third layer would cost.
+
+**Why** — `docs/plans/extensibility-refactor.md`'s Phase 4: this is a fact
+about the code today (`composite.frag.glsl`, the render targets, every layer
+union all assume two) that reads, to someone opening the project up, as an
+arbitrary limit rather than a decision, because nothing says it is one.
+
+**Decided** — one paragraph in each of the two docs named above, not a new
+document. Over: a longer design note — the spec calls this "the cheapest
+item on the list", and a paragraph that says what a third layer costs (a
+rewrite of `composite.frag.glsl`, the render targets, and every layer
+union) is enough to stop the question being asked casually.
+
+**Lands in** — `docs/how-it-works.md`, `docs/what-resolume-knew-about-layers.md`.
+
+**Done when** — both docs state the two-layer-plus-camera design and its
+cost explicitly; no code changes.
+
+**Verify** — read-through only; no gate applies beyond the two docs
+rendering as intended markdown.
+
+**Hard stops** — prefs no · url no · capture no · dependency no.

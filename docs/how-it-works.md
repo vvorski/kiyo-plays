@@ -387,8 +387,15 @@ wall. The bound is now 1/5 s.
 ## How it fits together
 
 ```
-main.ts            picks a mapping, owns the rAF loop
- ├─ permission-gate.ts   tap-to-start overlay, WebGL check, wake lock
+main.ts            the page: DOM, chrome, gate, prefs/URL → a Session and a Shell
+ ├─ permission-gate.ts   tap-to-start overlay, WebGL check, wake lock, fullscreen
+ ├─ session/             the app, with no opinion about its UI
+ │   ├─ session.ts         the loops, every input → visualiser, the look, the camera
+ │   ├─ shell.ts           the UI port; NULL_SHELL is what "no UI" means
+ │   ├─ gestures.ts        tap / double / hold / drag, as pure state
+ │   ├─ look.ts            the shuffle ladder
+ │   └─ idle.ts            the picture behind the gate
+ ├─ hud.ts               one Shell: the circular control surface
  ├─ engine/              everything that listens; knows no screen exists
  │   ├─ capture.ts         getUserMedia -> AnalyserNode -> AudioFrame
  │   ├─ fast.ts            AudioFrame -> Motion      10ms-4s  <- swappable
@@ -411,6 +418,14 @@ about the present. `director.ts` sits deliberately *outside* it, because
 measurement and policy fail differently — a wrong measurement is a bug with a
 right answer, a wrong opinion is a taste argument — and the measurement is
 worth having with the opinions switched off.
+
+`session/` became a directory when `main()` was found to be the app. The
+split that matters there is between the session and the shell: the session
+is what the picture does in response to a finger, a shake, the room, the
+hour and the music; the shell is whatever is drawn around it. A different
+control surface is a different `main.ts` and a different `Shell`, and
+`scripts/probe-session.ts` holds that claim by running the whole thing
+with no shell at all.
 
 ## Mappings
 

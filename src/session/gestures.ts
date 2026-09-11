@@ -350,112 +350,6 @@ export function dispatchGestures(state: GestureState, now: number, deps: Gesture
     state.contactIdFor.delete(e.id)
   }
 
-  // docs/todo.md entry 50: no threshold, every zone — a contact emits the
-  // instant it begins, wherever it lands, as long as it isn't a chip's
-  // own tap and the HUD isn't covering the picture. Entry 41's own
-  // zone-and-threshold logic for what a *release* does (save, open the
-  // panel) is untouched, further down — this is a second, independent
-  // thing every contact does, not a replacement for that dispatch.
-  const active: { contactId: number; x: number; y: number; speed: number }[] = []
-  // Any `.hud-chip` contact never reaches either stream below — a chip's
-  // own tap is that chip's gesture, not one that reaches the picture
-  // underneath. Also inert while the HUD is open — a HUD control's own
-  // drag already stopPropagation()s before it ever reaches this field,
-  // but a tap on the scrim itself (closing the panel) would not, and the
-  // picture is hidden behind the panel at that moment regardless.
-  //
-  // Entry 48's own capture-band exclusion is gone along with the zone it
-  // was defined against (entry 52): the touch stream's own contribution
-  // can now land in a saved frame exactly as entry 50 already made the
-  // geometric emitter's ring do, for the same reason stated there — it is
-  // picture, not UI, and a save can now happen from any tap rather than
-  // only ones landing in a fixed band this file no longer has a way to
-  // name. **Mine**, since entry 52's own text does not mention the touch
-  // stream at all; leaving the old exclusion in would have needed a
-  // "was this the tap that is about to save" fact that is not knowable
-  // until 280ms after the fact, which the render loop cannot wait for.
-  let streamAnyDown = false
-  let streamMaxSpeed = 0
-  // docs/todo.md entry 121 — recounted each frame. Entry 67 kept this for
-  // its two-finger opener and entry 125 deleted both together, correctly:
-  // it had no reader left. It has one again, and a different one — the
-  // question now is "is anybody touching the picture", not "are there
-  // exactly two".
-  let nonChipDown = 0
-  state.longestStillHold = 0
-  for (const t of deps.field.sample(now)) {
-    const speed = Math.hypot(t.vx, t.vy)
-    // docs/todo.md entry 80: a non-chip contact this file is currently
-    // spending on restoring fullscreen counts toward nothing else here —
-    // not the emitter, not the atmospheric stream, not the two-finger
-    // recogniser below — "does nothing else" means nothing else, not
-    // merely "no ring". A chip contact is unaffected, exactly as Decided
-    // states — the `!t.onChip` guard here is what keeps that true.
-    if (!t.onChip && fsBlocking) continue
-    // docs/todo.md entry 141 — the same total exclusion entry 80's own
-    // comment above states for a fullscreen-blocked contact, for the
-    // contact currently holding the emitter: not the ring, not the
-    // atmospheric stream, not the hold-to-arm recogniser below. Its own
-    // live position is still forwarded, every frame, which is what "no
-    // lag, no spring" while held actually requires — a `down`-time
-    // position alone would leave the emitter wherever the finger first
-    // landed rather than following it.
-    if (t.id === state.emitterDragId) {
-      if (state.emitterDragNodeIndex !== null) {
-        deps.visualiser.setChorusNodeDrag(state.emitterDragNodeIndex, { x: t.x, y: t.y })
-      } else {
-        deps.visualiser.setEmitterDrag({ x: t.x, y: t.y })
-      }
-      continue
-    }
-    if (!t.onChip) nonChipDown++
-    if (!t.onChip && !hudOpen) {
-      streamAnyDown = true
-      streamMaxSpeed = Math.max(streamMaxSpeed, speed)
-    }
-    if (t.onChip || hudOpen) continue
-    // docs/todo.md entry 115 — a still hold opens the menu. Checked here,
-    // in the per-frame contact loop, because "has this finger been down
-    // for three and a half seconds without moving" is a question about
-    // elapsed time that no event can answer: the `down` is too early and
-    // the `up` is too late. `downFor` and `downClientX`/`Y` are already on
-    // the sample, so this needs no new state beyond remembering which
-    // contact has already fired.
-    if (Math.hypot(t.clientX - t.downClientX, t.clientY - t.downClientY) <= HOLD_ARM_SLOP_PX) {
-      state.longestStillHold = Math.max(state.longestStillHold, t.downFor)
-    }
-    if (
-      state.holdOpenedBy === null &&
-      t.downFor >= HOLD_ARM_S &&
-      Math.hypot(t.clientX - t.downClientX, t.clientY - t.downClientY) <= HOLD_ARM_SLOP_PX &&
-      // docs/todo.md entry 125 — the stillness test above cannot see a
-      // shake, because the finger and the screen move together. This is
-      // what actually stops a thumb on a shaken phone from arming.
-      gesturesCalm(state, now)
-    ) {
-      state.holdOpenedBy = t.id
-      // A tap still waiting to pair into a double must not survive the
-      // gesture that consumed this contact.
-      state.lastTap = null
-      deps.camera.arm()
-    }
-    const contactId = state.contactIdFor.get(t.id)
-    // Absent only for a chip contact (never minted one) reaching here by
-    // a stale id, which should not happen given the exclusion above —
-    // defensive rather than load-bearing.
-    if (contactId === undefined) continue
-    active.push({ contactId, x: t.x, y: t.y, speed })
-  }
-  state.fingersOnPicture = nonChipDown
-  deps.visualiser.setTouches(active)
-
-  // docs/todo.md entry 112 — asked here rather than at the event, because
-  // "has the cursor been parked" is a question about elapsed time and
-  // nothing answers it until a frame goes by. `updateHover` is what
-  // applies HOVER_QUIET; this file only forwards its verdict.
-  const cursor = updateHover(deps.hover, now)
-  deps.visualiser.setHover(cursor.x, cursor.y, cursor.active, cursor.speed, cursor.presence)
-
   // Defensive rather than load-bearing: dispatchGestures only ever runs
   // after Start (frame() is not scheduled before it), so the gate should
   // already be gone by the time a tap can reach here — kept in case a
@@ -463,6 +357,21 @@ export function dispatchGestures(state: GestureState, now: number, deps: Gesture
   // replaced already carried.
   const gateShowing = deps.gateShowing
 
+  // This loop — every discrete down/up/cancel, including the emitter and
+  // Chorus-node claim (entry 141) — now runs *before* the sample pass
+  // below, not after it as `dispatchTouches` originally had it. Verbatim
+  // order left a one-frame gap `scripts/probe-gestures.ts` caught and
+  // `dispatchTouches` itself never had a way to be checked against: a
+  // contact landing exactly on the emitter was claimed here, but the
+  // sample loop below had already run *this same call* with the claim not
+  // yet set, so it read as an ordinary active touch for one frame — a
+  // ring and a stream sample entry 141's own comment says a claimed
+  // contact should never produce ("not the ring, not the atmospheric
+  // stream"). Running the claim first closes the gap: by the time the
+  // sample pass sees this frame's own new contact, `state.emitterDragId`
+  // already excludes it. Nothing else here reads anything the sample pass
+  // computes, so the swap changes only when this decides, not what it
+  // decides.
   let streamBegan = false
   for (const e of events) {
     if (e.kind === 'down') {
@@ -608,6 +517,112 @@ export function dispatchGestures(state: GestureState, now: number, deps: Gesture
     // not immediately reopen it.
     if (state.holdOpenedBy === e.id) state.holdOpenedBy = null
   }
+
+  // docs/todo.md entry 50: no threshold, every zone — a contact emits the
+  // instant it begins, wherever it lands, as long as it isn't a chip's
+  // own tap and the HUD isn't covering the picture. Entry 41's own
+  // zone-and-threshold logic for what a *release* does (save, open the
+  // panel) is untouched, above — this is a second, independent
+  // thing every contact does, not a replacement for that dispatch.
+  const active: { contactId: number; x: number; y: number; speed: number }[] = []
+  // Any `.hud-chip` contact never reaches either stream below — a chip's
+  // own tap is that chip's gesture, not one that reaches the picture
+  // underneath. Also inert while the HUD is open — a HUD control's own
+  // drag already stopPropagation()s before it ever reaches this field,
+  // but a tap on the scrim itself (closing the panel) would not, and the
+  // picture is hidden behind the panel at that moment regardless.
+  //
+  // Entry 48's own capture-band exclusion is gone along with the zone it
+  // was defined against (entry 52): the touch stream's own contribution
+  // can now land in a saved frame exactly as entry 50 already made the
+  // geometric emitter's ring do, for the same reason stated there — it is
+  // picture, not UI, and a save can now happen from any tap rather than
+  // only ones landing in a fixed band this file no longer has a way to
+  // name. **Mine**, since entry 52's own text does not mention the touch
+  // stream at all; leaving the old exclusion in would have needed a
+  // "was this the tap that is about to save" fact that is not knowable
+  // until 280ms after the fact, which the render loop cannot wait for.
+  let streamAnyDown = false
+  let streamMaxSpeed = 0
+  // docs/todo.md entry 121 — recounted each frame. Entry 67 kept this for
+  // its two-finger opener and entry 125 deleted both together, correctly:
+  // it had no reader left. It has one again, and a different one — the
+  // question now is "is anybody touching the picture", not "are there
+  // exactly two".
+  let nonChipDown = 0
+  state.longestStillHold = 0
+  for (const t of deps.field.sample(now)) {
+    const speed = Math.hypot(t.vx, t.vy)
+    // docs/todo.md entry 80: a non-chip contact this file is currently
+    // spending on restoring fullscreen counts toward nothing else here —
+    // not the emitter, not the atmospheric stream, not the two-finger
+    // recogniser below — "does nothing else" means nothing else, not
+    // merely "no ring". A chip contact is unaffected, exactly as Decided
+    // states — the `!t.onChip` guard here is what keeps that true.
+    if (!t.onChip && fsBlocking) continue
+    // docs/todo.md entry 141 — the same total exclusion entry 80's own
+    // comment above states for a fullscreen-blocked contact, for the
+    // contact currently holding the emitter: not the ring, not the
+    // atmospheric stream, not the hold-to-arm recogniser below. Its own
+    // live position is still forwarded, every frame, which is what "no
+    // lag, no spring" while held actually requires — a `down`-time
+    // position alone would leave the emitter wherever the finger first
+    // landed rather than following it.
+    if (t.id === state.emitterDragId) {
+      if (state.emitterDragNodeIndex !== null) {
+        deps.visualiser.setChorusNodeDrag(state.emitterDragNodeIndex, { x: t.x, y: t.y })
+      } else {
+        deps.visualiser.setEmitterDrag({ x: t.x, y: t.y })
+      }
+      continue
+    }
+    if (!t.onChip) nonChipDown++
+    if (!t.onChip && !hudOpen) {
+      streamAnyDown = true
+      streamMaxSpeed = Math.max(streamMaxSpeed, speed)
+    }
+    if (t.onChip || hudOpen) continue
+    // docs/todo.md entry 115 — a still hold opens the menu. Checked here,
+    // in the per-frame contact loop, because "has this finger been down
+    // for three and a half seconds without moving" is a question about
+    // elapsed time that no event can answer: the `down` is too early and
+    // the `up` is too late. `downFor` and `downClientX`/`Y` are already on
+    // the sample, so this needs no new state beyond remembering which
+    // contact has already fired.
+    if (Math.hypot(t.clientX - t.downClientX, t.clientY - t.downClientY) <= HOLD_ARM_SLOP_PX) {
+      state.longestStillHold = Math.max(state.longestStillHold, t.downFor)
+    }
+    if (
+      state.holdOpenedBy === null &&
+      t.downFor >= HOLD_ARM_S &&
+      Math.hypot(t.clientX - t.downClientX, t.clientY - t.downClientY) <= HOLD_ARM_SLOP_PX &&
+      // docs/todo.md entry 125 — the stillness test above cannot see a
+      // shake, because the finger and the screen move together. This is
+      // what actually stops a thumb on a shaken phone from arming.
+      gesturesCalm(state, now)
+    ) {
+      state.holdOpenedBy = t.id
+      // A tap still waiting to pair into a double must not survive the
+      // gesture that consumed this contact.
+      state.lastTap = null
+      deps.camera.arm()
+    }
+    const contactId = state.contactIdFor.get(t.id)
+    // Absent only for a chip contact (never minted one) reaching here by
+    // a stale id, which should not happen given the exclusion above —
+    // defensive rather than load-bearing.
+    if (contactId === undefined) continue
+    active.push({ contactId, x: t.x, y: t.y, speed })
+  }
+  state.fingersOnPicture = nonChipDown
+  deps.visualiser.setTouches(active)
+
+  // docs/todo.md entry 112 — asked here rather than at the event, because
+  // "has the cursor been parked" is a question about elapsed time and
+  // nothing answers it until a frame goes by. `updateHover` is what
+  // applies HOVER_QUIET; this file only forwards its verdict.
+  const cursor = updateHover(deps.hover, now)
+  deps.visualiser.setHover(cursor.x, cursor.y, cursor.active, cursor.speed, cursor.presence)
 
   deps.visualiser.setTouchStream(streamBegan, streamAnyDown, streamMaxSpeed)
 }

@@ -1046,8 +1046,17 @@ export function createSession(options: SessionOptions): Session {
     // construction, not after Start — so the session may already be over by
     // the time the start gesture's microphone promise resolves. Going live
     // then would reopen the sensor and start a loop against a disposed
-    // visualiser, so this declines instead.
-    if (!running) return
+    // visualiser, so this declines instead. `audio` is closed on the way
+    // out: `waitForStart()` has already opened the microphone by the time
+    // this runs, and declining without closing it would leave the sensor
+    // powered and the OS indicator lit behind a gate showing nothing that
+    // explains it — the exact condition the rest of this file's own
+    // close-on-decline comments (`applyPassthrough`, `dispose`) exist to
+    // prevent, arriving here by the one door this guard opened.
+    if (!running) {
+      audio.close()
+      return
+    }
     source = audio
     live = true
     // docs/todo.md entry 60: undo whatever the gate rolled. `visualiser` is the

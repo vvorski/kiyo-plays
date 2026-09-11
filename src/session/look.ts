@@ -51,10 +51,10 @@ export type LookPatch = Partial<
  * somewhere random"). `geo=`/`atm=` rather than `mix=`: a session where the
  * two were set independently (from the HUD, never a link) would otherwise
  * lose the atmosphere's own alpha the moment `mix=` overwrote it back to the
- * value that parameter implies. Built from `prefs` — the same source
- * `Hud.current()` already reads — so this reflects whatever is live right
- * now, including anything the autopilot or a shake has since adopted, not
- * only what the page loaded with.
+ * value that parameter implies. Built from `prefs` — the same object the
+ * HUD reads through `LookControls.look` — so this reflects whatever is live
+ * right now, including anything the autopilot or a shake has since applied,
+ * not only what the page loaded with.
  *
  * The origin and path are the page's, not the session's, so this returns
  * the query alone and the caller prefixes.
@@ -175,8 +175,8 @@ interface Shuffle {
  * this; the roll lives in `maybeRollCamera()` because it needs an async
  * permission check this function cannot make.
  *
- * A field is present only when its rung is reached, so `Hud.adopt()`'s
- * "only touch what's given" guards do the rest — a shuffle that doesn't
+ * A field is present only when its rung is reached, so `Session.apply()`'s
+ * own "only touch what's given" guards do the rest — a shuffle that doesn't
  * reach mapping must never re-create the live Mapping instance and discard
  * its envelope state for nothing.
  */

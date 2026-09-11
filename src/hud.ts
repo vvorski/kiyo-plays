@@ -42,8 +42,9 @@ import {
 import { MERGE_MODES, type MergeModeName } from './merge-modes'
 import { MAPPINGS, type MappingName, type VisualParams } from './engine'
 import { type GeoColour } from './geo-colour'
-import { savePrefs, type Prefs } from './prefs'
+import type { Prefs } from './prefs'
 import type { SessionStats } from './session/shell'
+import type { LookPatch } from './session/look'
 
 const SVG_NS = 'http://www.w3.org/2000/svg'
 import { chipPosition } from './chip-arc.ts'
@@ -127,44 +128,11 @@ const MAPPING_LABELS: Record<MappingName, string> = {
 export interface Hud {
   /** Call every frame with the current state; only does work while visible. */
   update(params: VisualParams, stats: SessionStats): void
-  /** Adopt a change decided elsewhere — the autopilot (director.ts) or a
-   *  shake-driven shuffle (main.ts). Updates the stored preferences and the
-   *  dial without itself reporting a manual change; whether the autopilot
-   *  should stand down is the caller's decision, not this one's.
-   *
-   *  `colourRampS` (docs/todo.md entry 92) applies to any `geoColour`/
-   *  `atmColour`/`camColour` present on `next` for this one call —
-   *  required, not defaulted, so the caller states its own source's
-   *  travel time explicitly rather than the dial picking one on its
-   *  behalf. */
-  adopt(next: {
-    geometricView?: GeometricViewName
-    atmosphericView?: AtmosphericViewName
-    mergeMode?: MergeModeName
-    atmMergeMode?: MergeModeName
-    geoColour?: GeoColour
-    atmColour?: GeoColour
-    camColour?: GeoColour
-    /** 0-1. Only ever set by a shuffle depth ladder deep enough to include
-     *  opacity — see docs/todo.md entry 15. */
-    geoAlpha?: number
-    atmAlpha?: number
-    mapping?: MappingName
-    /** 0-1, the camera's actual, already-resolved passthrough level — see
-     *  docs/todo.md entry 22. The caller has already done whatever asking
-     *  or permission-checking was needed before this is set; `adopt()` only
-     *  ever records the result, the same way it never itself asks for a
-     *  colour or a merge mode. */
-    passthrough?: number
-  }, colourRampS: number): void
-  /**
-   * The four continuous quantities a light shake's nudge needs to read
-   * before it can move them — docs/todo.md entry 35. `shuffled()` is pure
-   * and cannot see the screen itself, so this is the accessor that lets a
-   * nudge start from what is actually on screen rather than from an absolute
-   * roll. Read-only, one fact read back out rather than pushed in.
-   */
-  current(): { geoColour: GeoColour; atmColour: GeoColour; geoAlpha: number; atmAlpha: number }
+  /** The session changed the look on its own — the autopilot, a shake, a
+   *  camera raise. Nothing to write: `controls.look` is already what is on
+   *  screen. Only redraw what is visible; the HUD is closed most of the
+   *  time and setOpen rebuilds from the look anyway. */
+  lookChanged(): void
   /**
    * Open the panel — docs/todo.md entries 41 and 52. main.ts's single
    * recogniser calls this once it resolves a double tap anywhere on the
@@ -196,41 +164,25 @@ export interface Hud {
   toggleStats(): void
 }
 
-interface Handlers {
-  onGeometricView(name: GeometricViewName): void
-  onAtmosphericView(name: AtmosphericViewName): void
-  /** A layer's own blend, over what's beneath it. */
-  onMergeMode(layer: 'geo' | 'atm', mode: MergeModeName): void
-  onMapping(name: MappingName): void
-  /** 0-1, a layer's opacity. */
-  onAlpha(layer: 'geo' | 'atm', a: number): void
-  /** A layer's colour gain. `rampS` is how long the colour should take to
-   *  travel there (docs/todo.md entry 92) — 0 for a direct drag, which
-   *  must stay immediate. */
-  onColour(layer: 'geo' | 'atm' | 'cam', colour: GeoColour, rampS: number): void
-  /**
-   * 0-1 of the passthrough camera.
-   *
-   * Async and able to fail, unlike every other handler here, because the first
-   * non-zero value is what actually asks for the camera — and the person can
-   * say no. Resolves to the opacity really achieved, so the band can snap back
-   * to 0 on a refusal rather than sitting somewhere untrue.
-   */
-  onPassthrough(a: number): Promise<number>
-  /** Fired on every change the user makes by hand, so the autopilot can get
-   *  out of the way. Not fired for `adopt`. */
-  onManualChange(): void
+/** What the HUD needs from the session: the look to draw, and one way to
+ *  change it. Narrower than `Session` on purpose — the HUD must not be able
+ *  to start, stop or dispose the app it is drawn over. */
+export interface LookControls {
+  readonly look: Readonly<Prefs>
+  apply(patch: LookPatch, opts: { rampS: number; persist?: boolean }): void
+  persist(): void
+  setPassthrough(a: number): Promise<number>
   /**
    * Momentary solo — docs/todo.md entry 83. Forces every layer but `layer`
-   * to render at 0 opacity for as long as the chip is held; `onUnsolo`
-   * lifts the force. Neither writes to prefs — this is the same
+   * to render at 0 opacity for as long as the chip is held; `unsolo` lifts
+   * the force. Neither writes to `prefs` — this is the same
    * render-time-override seam entries 48, 58 and 60 already use, so there
    * is nothing to restore on release beyond removing the override, and
    * nothing an interrupted gesture (a pointer that never delivers `up`)
    * can leave behind.
    */
-  onSolo(layer: 'geo' | 'atm' | 'cam'): void
-  onUnsolo(): void
+  solo(layer: 'geo' | 'atm' | 'cam'): void
+  unsolo(): void
 }
 
 /** Bold geometric masses, because a 20px drawing over a moving visualiser
@@ -438,7 +390,8 @@ type Band = EnumBand | ScalarBand
  * exists to undo: `prefs` is what persists, and a per-load URL flag is not
  * a persisted fact.
  */
-export function createHud(prefs: Prefs, handlers: Handlers, debugFromUrl = false): Hud {
+export function createHud(controls: LookControls, debugFromUrl = false): Hud {
+  const prefs = controls.look
   const style = document.createElement('style')
   style.textContent = CSS
   document.head.appendChild(style)
@@ -466,26 +419,15 @@ export function createHud(prefs: Prefs, handlers: Handlers, debugFromUrl = false
 
   document.body.appendChild(scrim)
 
-  const manual = (): void => handlers.onManualChange()
-
   const geometricKeys = Object.keys(GEOMETRIC_VIEWS) as GeometricViewName[]
   const atmosphericKeys = Object.keys(ATMOSPHERIC_VIEWS) as AtmosphericViewName[]
   const mergeKeys = Object.keys(MERGE_MODES) as MergeModeName[]
   const mappingKeys = Object.keys(MAPPINGS) as MappingName[]
 
   /** What the camera band shows, which during a drag runs ahead of what has
-   *  actually been granted. onPassthrough is the only thing allowed to make it
-   *  true — see the camera opacity band's settle(). */
+   *  actually been granted. `controls.setPassthrough` is the only thing
+   *  allowed to make it true — see the camera opacity band's settle(). */
   let camShown = 0
-
-  /** Save, keeping the legacy `mix` in step with the geometric alpha. Nothing
-   *  reads `mix` any more, but it is the field older builds and older shared
-   *  links use, so writing it means landing back on an earlier build shows the
-   *  picture you left rather than a default. */
-  const save = (): void => {
-    prefs.mix = prefs.geoAlpha
-    savePrefs(prefs)
-  }
 
   /** The three colour bands every layer gets, built from one description. */
   function colourBands(layer: 'geo' | 'atm' | 'cam', read: () => GeoColour): ScalarBand[] {
@@ -496,13 +438,9 @@ export function createHud(prefs: Prefs, handlers: Handlers, debugFromUrl = false
       current: () => read()[key],
       apply: (v: number) => {
         const next = { ...read(), [key]: v }
-        if (layer === 'geo') prefs.geoColour = next
-        else if (layer === 'atm') prefs.atmColour = next
-        else prefs.camColour = next
-        handlers.onColour(layer, next, 0)
-        manual()
+        controls.apply({ [`${layer}Colour`]: next } as LookPatch, { rampS: 0, persist: false })
       },
-      settle: save,
+      settle: controls.persist,
     }))
   }
 
@@ -515,11 +453,10 @@ export function createHud(prefs: Prefs, handlers: Handlers, debugFromUrl = false
       label: (k) => MERGE_MODES[k as MergeModeName].label,
       current: () => (layer === 'geo' ? prefs.mergeMode : prefs.atmMergeMode),
       commit: (k) => {
-        if (layer === 'geo') prefs.mergeMode = k as MergeModeName
-        else prefs.atmMergeMode = k as MergeModeName
-        save()
-        handlers.onMergeMode(layer, k as MergeModeName)
-        manual()
+        controls.apply(
+          layer === 'geo' ? { mergeMode: k as MergeModeName } : { atmMergeMode: k as MergeModeName },
+          { rampS: 0 },
+        )
       },
       rot: 0,
     }
@@ -537,12 +474,9 @@ export function createHud(prefs: Prefs, handlers: Handlers, debugFromUrl = false
       texture: layer === 'geo' ? 'solid' : 'halo',
       current: () => (layer === 'geo' ? prefs.geoAlpha : prefs.atmAlpha),
       apply: (v) => {
-        if (layer === 'geo') prefs.geoAlpha = v
-        else prefs.atmAlpha = v
-        handlers.onAlpha(layer, v)
-        manual()
+        controls.apply(layer === 'geo' ? { geoAlpha: v } : { atmAlpha: v }, { rampS: 0, persist: false })
       },
-      settle: save,
+      settle: controls.persist,
     }
   }
 
@@ -560,10 +494,7 @@ export function createHud(prefs: Prefs, handlers: Handlers, debugFromUrl = false
           label: (k) => GEOMETRIC_VIEWS[k as GeometricViewName].label,
           current: () => prefs.geometricView,
           commit: (k) => {
-            prefs.geometricView = k as GeometricViewName
-            save()
-            handlers.onGeometricView(prefs.geometricView)
-            manual()
+            controls.apply({ geometricView: k as GeometricViewName }, { rampS: 0 })
           },
           rot: 0,
         },
@@ -583,10 +514,7 @@ export function createHud(prefs: Prefs, handlers: Handlers, debugFromUrl = false
           label: (k) => ATMOSPHERIC_VIEWS[k as AtmosphericViewName].label,
           current: () => prefs.atmosphericView,
           commit: (k) => {
-            prefs.atmosphericView = k as AtmosphericViewName
-            save()
-            handlers.onAtmosphericView(prefs.atmosphericView)
-            manual()
+            controls.apply({ atmosphericView: k as AtmosphericViewName }, { rampS: 0 })
           },
           rot: 0,
         },
@@ -612,16 +540,20 @@ export function createHud(prefs: Prefs, handlers: Handlers, debugFromUrl = false
           current: () => camShown,
           apply: (v) => {
             camShown = v
-            manual()
+            // The only band whose live-drag value isn't written to `prefs`
+            // until settle() — so there is no patch to carry the suspend
+            // that every other control gets from naming a field. An empty
+            // apply still defaults to source 'manual' and suspends the
+            // director, without writing `prefs` or touching the visualiser.
+            controls.apply({}, { rampS: 0, persist: false })
           },
           settle: () => {
             // The one control whose value is not ours to decide: the first
             // non-zero drag is what asks for the camera, and the answer can
             // be no.
-            void handlers.onPassthrough(camShown).then((granted) => {
+            void controls.setPassthrough(camShown).then((granted) => {
               camShown = granted
-              prefs.passthrough = granted
-              save()
+              controls.apply({ passthrough: granted }, { rampS: 0 })
               build()
             })
           },
@@ -643,10 +575,7 @@ export function createHud(prefs: Prefs, handlers: Handlers, debugFromUrl = false
           label: (k) => MAPPING_LABELS[k as MappingName],
           current: () => prefs.mapping,
           commit: (k) => {
-            prefs.mapping = k as MappingName
-            save()
-            handlers.onMapping(prefs.mapping)
-            manual()
+            controls.apply({ mapping: k as MappingName }, { rampS: 0 })
           },
           rot: 0,
         },
@@ -868,7 +797,7 @@ export function createHud(prefs: Prefs, handlers: Handlers, debugFromUrl = false
       },
       'inner',
       id === 'geo' || id === 'atm' || id === 'cam'
-        ? { onStart: () => handlers.onSolo(id), onEnd: () => handlers.onUnsolo() }
+        ? { onStart: () => controls.solo(id), onEnd: () => controls.unsolo() }
         : undefined,
     )
   }
@@ -894,10 +823,9 @@ export function createHud(prefs: Prefs, handlers: Handlers, debugFromUrl = false
    */
   const toggleStats = (): void => {
     showStats = !showStats
-    prefs.showStats = showStats
     stats.hidden = !showStats
     if (!showStats) stats.textContent = ''
-    save()
+    controls.apply({ showStats }, { rampS: 0 })
     paint()
   }
 
@@ -911,8 +839,7 @@ export function createHud(prefs: Prefs, handlers: Handlers, debugFromUrl = false
     'Gravity',
     '#9d9bf0',
     () => {
-      prefs.gravity = !prefs.gravity
-      save()
+      controls.apply({ gravity: !prefs.gravity }, { rampS: 0 })
       paint()
     },
     'outer',
@@ -1382,89 +1309,17 @@ export function createHud(prefs: Prefs, handlers: Handlers, debugFromUrl = false
       ].join('\n')
     },
 
-    current: () => ({
-      geoColour: prefs.geoColour,
-      atmColour: prefs.atmColour,
-      geoAlpha: prefs.geoAlpha,
-      atmAlpha: prefs.atmAlpha,
-    }),
     showingStats: () => showStats,
     toggleStats,
     open: () => setOpen(true),
     close: () => setOpen(false),
 
-    adopt(next, colourRampS) {
-      // Re-read the camera band's displayed level from `prefs` on every
-      // adopt, not only on one that names `passthrough` below.
-      //
-      // `camShown` is the only piece of this panel's state that does not
-      // live in `prefs` — it has to exist, because during a drag the band
-      // runs ahead of what the camera has actually granted — and until now
-      // the single thing that kept it honest against a change made
-      // elsewhere was the `next.passthrough` branch at the bottom of this
-      // method. The session (session/session.ts) reports a change it made
-      // itself through `Shell.lookChanged()`, which carries no patch: it
-      // has already written `prefs` and only needs the panel to catch up.
-      // With an empty `next`, that branch never runs, so a shake that
-      // raised the camera while the HUD was shut left this field holding
-      // the previous level — and the *next* touch on the band would settle
-      // with that stale number, which at 0 quietly closes a live stream.
-      // Reading `prefs` here is what a no-argument "the look changed" can
-      // mean at all. A drag is unaffected: `adopt()` is never called
-      // mid-drag, and the band's own settle still writes `camShown` from
-      // what was actually granted.
+    /** The session changed the look on its own — the autopilot, a shake, a
+     *  camera raise. Nothing to write: `controls.look` is already what is on
+     *  screen. Only redraw what is visible; the HUD is closed most of the
+     *  time and setOpen rebuilds from the look anyway. */
+    lookChanged() {
       camShown = prefs.passthrough
-      if (next.geometricView) {
-        prefs.geometricView = next.geometricView
-        handlers.onGeometricView(prefs.geometricView)
-      }
-      if (next.atmosphericView) {
-        prefs.atmosphericView = next.atmosphericView
-        handlers.onAtmosphericView(prefs.atmosphericView)
-      }
-      if (next.mergeMode) {
-        prefs.mergeMode = next.mergeMode
-        handlers.onMergeMode('geo', prefs.mergeMode)
-      }
-      if (next.atmMergeMode) {
-        prefs.atmMergeMode = next.atmMergeMode
-        handlers.onMergeMode('atm', prefs.atmMergeMode)
-      }
-      for (const [layer, colour] of [
-        ['geo', next.geoColour],
-        ['atm', next.atmColour],
-        ['cam', next.camColour],
-      ] as const) {
-        if (!colour) continue
-        if (layer === 'geo') prefs.geoColour = colour
-        else if (layer === 'atm') prefs.atmColour = colour
-        else prefs.camColour = colour
-        handlers.onColour(layer, colour, colourRampS)
-      }
-      if (next.geoAlpha !== undefined) {
-        prefs.geoAlpha = next.geoAlpha
-        handlers.onAlpha('geo', next.geoAlpha)
-      }
-      if (next.atmAlpha !== undefined) {
-        prefs.atmAlpha = next.atmAlpha
-        handlers.onAlpha('atm', next.atmAlpha)
-      }
-      if (next.mapping) {
-        prefs.mapping = next.mapping
-        handlers.onMapping(next.mapping)
-      }
-      if (next.passthrough !== undefined) {
-        // No handler call here, unlike every other field above: the caller
-        // already resolved the actual level (including any permission check
-        // and the visualiser call that follows from it) before calling
-        // adopt() at all — see docs/todo.md entry 22. This only makes the
-        // camera opacity band agree with what is already on screen.
-        camShown = next.passthrough
-        prefs.passthrough = next.passthrough
-      }
-      save()
-      // Only redraw what is visible; the HUD is closed most of the time and
-      // setOpen rebuilds from prefs anyway.
       if (open) build()
     },
   }

@@ -33,29 +33,31 @@
     day: false,
     skyOverride: 'auto',
   }
-  const log = (n) => (...a) => calls.push([n, JSON.stringify(a)])
-  const hud = createHud(prefs, {
-    onGeometricView: log('geometricView'),
-    onColour: log('colour'),
-    onAtmosphericView: log('atmosphericView'),
-    onMergeMode: log('mergeMode'),
-    onAlpha: log('alpha'),
-    onMapping: log('mapping'),
-    onSkyOverride: log('skyOverride'),
-    onCameraMode: log('cameraMode'),
-    onManualChange: log('manualChange'),
+  // A fake LookControls: apply() logs the patch and mutates `prefs` directly,
+  // the way the real session's apply() would have — so the bands redraw from
+  // the same object they read, and one settled drag shows as one `apply` plus
+  // one `persist` rather than one per frame.
+  const hud = createHud({
+    look: prefs,
+    apply: (patch, opts) => {
+      Object.assign(prefs, patch)
+      calls.push(['apply', JSON.stringify([patch, opts])])
+    },
+    persist: () => calls.push(['persist', '']),
     // Grants whatever is asked for. The refusal path is the camera probe's
     // job; here the point is only that the ring's commit round-trips through
     // a promise and lands back on the control.
-    onPassthrough: (m) => {
-      calls.push(['passthrough', JSON.stringify([m])])
-      return Promise.resolve(m)
+    setPassthrough: async (a) => {
+      calls.push(['passthrough', String(a)])
+      return a
     },
-  })
+    solo: (l) => calls.push(['solo', l]),
+    unsolo: () => calls.push(['unsolo', '']),
+  }, true)
   window.calls = calls
-  // Exposed so a test can drive adopt() directly — a shuffle (docs/todo.md
-  // entry 15) isn't reachable through a pointer gesture the way every other
-  // change here is.
+  // Exposed so a test can drive lookChanged() directly — a shuffle
+  // (docs/todo.md entry 15) isn't reachable through a pointer gesture the
+  // way every other change here is.
   window.hud = hud
 
   // The HUD opens on a document-level pointerup whose travel is under

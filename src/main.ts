@@ -42,7 +42,7 @@ import {
   isGeometricViewName,
 } from './views'
 import { shuffled, SHUFFLE_VIEWS } from './session/look'
-import { createSession, type LookPatch, type Shell } from './session'
+import { createSession, type Shell } from './session'
 
 /** Relative loudness: self-calibrates between a quiet room and a sound system. */
 const DEFAULT_MAPPING: MappingName = 'relative'
@@ -432,7 +432,7 @@ async function main(): Promise<void> {
   let panel: Hud | null = null
 
   const shell: Shell = {
-    lookChanged: () => panel?.adopt({}, 0),
+    lookChanged: () => panel?.lookChanged(),
     isOpen: () => document.querySelector('.hud-scrim.open') !== null,
     open: () => panel?.open(),
     ownsTarget: (t) => t instanceof Element && t.closest('.hud-chip') !== null,
@@ -489,37 +489,13 @@ async function main(): Promise<void> {
     canvas,
   })
 
-  // The interim double write, until the HUD itself becomes a Shell: the
-  // handlers below hand every manual change to `session.apply()`, which
-  // assigns `prefs` and saves — and `createHud`'s own bands still assign the
-  // same field and save again on the way past. Same value into the same
-  // store, so it is harmless; it is noted here rather than worked around
-  // because working around it means changing hud.ts, which is its own step.
-  panel = createHud(prefs, {
-    onGeometricView: (name) => session.apply({ geometricView: name }, { rampS: 0, source: 'manual' }),
-    onAtmosphericView: (name) => session.apply({ atmosphericView: name }, { rampS: 0, source: 'manual' }),
-    onMergeMode: (layer, mode) =>
-      session.apply(layer === 'geo' ? { mergeMode: mode } : { atmMergeMode: mode }, { rampS: 0, source: 'manual' }),
-    onColour: (layer, colour, rampS) =>
-      session.apply({ [`${layer}Colour`]: colour } as LookPatch, { rampS, source: 'manual', persist: false }),
-    onAlpha: (layer, a) =>
-      session.apply(layer === 'geo' ? { geoAlpha: a } : { atmAlpha: a }, { rampS: 0, source: 'manual', persist: false }),
-    onMapping: (name) => session.apply({ mapping: name }, { rampS: 0, source: 'manual' }),
-    onPassthrough: session.setPassthrough,
-    onSolo: session.solo,
-    onUnsolo: session.unsolo,
-    // Every other handler above reaches `session.apply()` with source
-    // 'manual', which suspends the director on its own — so this looks like
-    // it should be a no-op, and was one until the camera opacity band
-    // turned out not to go through any of them. That band calls hud.ts's
-    // `manual()` directly from its own drag and settles later through
-    // `onPassthrough`, so this is the only thing standing between a drag on
-    // it and the autopilot walking the views out from under the finger. An
-    // empty patch exercises the suspend path and nothing else: no field is
-    // set, so no visualiser call is made, and `persist: false` keeps a
-    // per-frame drag off `localStorage`.
-    onManualChange: () => session.apply({}, { rampS: 0, source: 'manual', persist: false }),
-  }, new URLSearchParams(window.location.search).has('debug'))
+  // `Session` satisfies `LookControls` structurally: it has the same `look`,
+  // `apply`, `persist`, `setPassthrough`, `solo` and `unsolo`, and `apply`'s
+  // `source` defaults to `'manual'` for a caller — the HUD — that has no
+  // reason to know the director/shake/camera vocabulary. No adapter left to
+  // write here; the interim double write this comment used to describe is
+  // gone along with the object it described.
+  panel = createHud(session, new URLSearchParams(window.location.search).has('debug'))
 
   // The powder easter egg — docs/todo.md entry 46. Wired here, before Start,
   // since the entry's whole point is a secret found on the screen everyone

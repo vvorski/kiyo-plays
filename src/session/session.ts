@@ -109,7 +109,7 @@ export interface SessionOptions {
 export interface Session {
   readonly look: Readonly<Prefs>
   readonly visualiser: Visualiser
-  apply(patch: LookPatch, opts: { rampS: number; source: LookSource; persist?: boolean }): void
+  apply(patch: LookPatch, opts: { rampS: number; source?: LookSource; persist?: boolean }): void
   persist(): void
   setPassthrough(a: number): Promise<number>
   solo(layer: 'geo' | 'atm' | 'cam'): void
@@ -175,8 +175,15 @@ export function createSession(options: SessionOptions): Session {
    * for a manual change — the courtesy every HUD control already got — and
    * tells the shell for every other source, so a panel that is open redraws
    * to what is actually on screen.
+   *
+   * `source` defaults to `'manual'`: the HUD is the caller that never names
+   * one (it satisfies `LookControls`, which has no reason to know the
+   * director/shake/camera vocabulary), and a manual default is also the
+   * safe one — an unlabelled caller suspending the autopilot is a much
+   * smaller surprise than one silently reporting itself to the shell as
+   * something the person didn't do.
    */
-  const apply: Session['apply'] = (patch, { rampS, source: from, persist: doPersist = true }) => {
+  const apply: Session['apply'] = (patch, { rampS, source: from = 'manual', persist: doPersist = true }) => {
     if (patch.geometricView) {
       prefs.geometricView = patch.geometricView
       visualiser.setGeometricView(patch.geometricView)

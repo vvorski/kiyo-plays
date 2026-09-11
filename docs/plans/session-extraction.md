@@ -785,7 +785,7 @@ export interface SessionOptions {
 export interface Session {
   readonly look: Readonly<Prefs>
   readonly visualiser: Visualiser
-  apply(patch: LookPatch, opts: { rampS: number; source: LookSource; persist?: boolean }): void
+  apply(patch: LookPatch, opts: { rampS: number; source?: LookSource; persist?: boolean }): void
   persist(): void
   setPassthrough(a: number): Promise<number>
   solo(layer: 'geo' | 'atm' | 'cam'): void

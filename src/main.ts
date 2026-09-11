@@ -427,8 +427,11 @@ async function main(): Promise<void> {
   const GLYPH_FADE_MS = 600
   let glyphFadeTimeout = 0
 
-  // Declared with `let` so the shell can reach it — the HUD is built after
-  // the session, because the HUD's handlers need the session's apply().
+  // Declared with `let` so the shell can reach it. The ordering still runs
+  // shell, then session, then panel: `shell` below closes over `panel` before
+  // it exists, `session` takes that `shell` as a constructor option, and
+  // `createHud` takes `session` itself as its `LookControls` argument — so
+  // the HUD cannot be built until the session it draws is.
   let panel: Hud | null = null
 
   const shell: Shell = {

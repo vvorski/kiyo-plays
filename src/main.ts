@@ -480,6 +480,20 @@ async function main(): Promise<void> {
     deliverCapture: saveCapture,
   }
 
+  // A page restored from the back/forward cache is a page whose session has
+  // already been disposed. The session binds `pagehide` at construction
+  // (session.ts), so putting the page away — switching apps on a phone, or
+  // following a link and coming back — disposes it, and a bfcache restore
+  // then hands back the same DOM with a dead session behind it. Tapping Start
+  // opened the microphone, the gate faded, and `start()` declined to go live:
+  // a frozen picture with no HUD and no error anywhere. Reproduced on the
+  // live site by firing `pagehide` and then tapping the disc. A session
+  // cannot be revived in place — its visualiser, listeners and loops are all
+  // torn down — so a restore reloads, which is exactly a fresh visit.
+  window.addEventListener('pageshow', (e) => {
+    if (e.persisted) location.reload()
+  })
+
   const session = createSession({
     visualiser,
     prefs,

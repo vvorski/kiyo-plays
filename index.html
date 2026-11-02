@@ -572,9 +572,13 @@
       .gate-chip svg { width: 19px; height: 19px; display: block; }
 
       /* Share, in the top-right corner — everything but its own position and
-         "copied" state now lives in .gate-chip above. */
+         "copied" state now lives in .gate-chip above. The z-index is for short
+         screens: .gate-head comes later in the DOM with a stacking context of
+         its own, and at 844x390 it reaches this corner, which left 6% of the
+         icon tappable. */
       .gate-share {
         position: absolute;
+        z-index: 1;
         top: calc(1.1rem + env(safe-area-inset-top, 0px));
         right: calc(1.1rem + env(safe-area-inset-right, 0px));
       }

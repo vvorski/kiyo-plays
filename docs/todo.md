@@ -2906,9 +2906,9 @@ and after); then an iPhone. No HUD surface is touched.
 **Hard stops** — prefs no · url no · capture no · dependency no.
 
 ### 129. The tap after a hold is a shutter, not a play — is that the price?
-`status: blocked` · added 2026-09-05 · found at build 416 with the entry above · **needs Victor** · concerns 115 and 125
+`status: done` · added 2026-09-05 · build 502 · found at build 416 with the entry above · concerns 115 and 125 · **parked, none of the four costed options built**
 
-**Victor, 2026-11-01: "let's park the photo mode for now."** Not one of the four costed options. Still blocked on one clarification: does "park" mean disable hold-to-arm (so a hold does nothing and the next tap plays), or leave it as is while the camera work waits? Do not build until answered.
+**Victor, 2026-11-01: "let's park the photo mode for now."** Not one of the four costed options. Build 502 took that to mean disable hold-to-arm: `CAMERA_ARMING_ENABLED = false` in `session/gestures.ts` gates both the finger's hold and the mouse's click, and the camera code stays in place. Its commit records that reading as Victor's decision. This line said "still blocked, do not build" until build 504, because the status was written before the answer and never updated.
 
 **Do** — nothing yet. This puts a cost to Victor that entries 115 and 125 each
 recorded and neither put to him.
@@ -5114,7 +5114,7 @@ moved.
 **Hard stops** — prefs no · url no · capture no · dependency no.
 
 ### 149. Two layers is the design
-`status: ready` · added 2026-09-11
+`status: done` · added 2026-09-11 · build 504
 
 **Do** — write into `docs/how-it-works.md` and
 `docs/what-resolume-knew-about-layers.md` that composition is exactly two

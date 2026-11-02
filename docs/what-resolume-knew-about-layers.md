@@ -68,6 +68,14 @@ day ground, the vibrance and the channel slip are composition-level. Entries
 Naming the three levels would have answered that question once instead of three
 times, and would answer it for the next one.
 
+**The two is a decision, and it is the one thing here not to borrow.** Resolume
+stacks as many layers as you can afford; kiyo composites exactly two plus a
+camera, because a hit over a field is the whole composition and a phone in the
+hand pays for every fullscreen pass. Nothing below assumes otherwise. A third
+layer would mean rewriting `composite.frag.glsl`, whose blend seams are
+hard-coded in order, along with the render targets and every layer union in the
+HUD, the prefs and the URL parameters.
+
 ## 3. The five lessons, ranked
 
 ### 1. Changes should land on the beat, not on a timer

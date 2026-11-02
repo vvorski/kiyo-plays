@@ -35,6 +35,19 @@ outward, spinning down — and **Grid** quantises it into square wavefronts that
 light whole cells at a time. All three read the same transient buffer
 (`ripples.ts`); they differ only in what they draw with it.
 
+**Two layers plus a camera is the design, not a limit nobody has got round to
+lifting.** The picture is one thing that happens (a hit) over one thing that
+persists (a field), and that pairing is what the two registries, the two render
+targets and the two blend uniforms all encode. The camera is not a third layer:
+nobody picks it from a registry and it has no render target of its own. When it
+is on, it is the base the finished picture blends over, faded in by
+`uCameraMix`. A third layer would cost a rewrite rather than an addition:
+`composite.frag.glsl` hard-codes its two seams (`uMode` for geometry over
+atmosphere, `uAtmMode` for that result over the camera) and samples exactly
+`uGeometry` and `uAtmosphere`, `scene.ts` allocates exactly those two targets,
+and every layer union in the HUD, the prefs and the URL parameters names exactly
+those two layers.
+
 **The geometric layer is drawn, not lit.** Every view on it renders hard-edged
 white line work — no gaussian falloffs, no glow, no colour. Soft radial
 falloffs read as light leaking rather than as geometry, and turn to mush the

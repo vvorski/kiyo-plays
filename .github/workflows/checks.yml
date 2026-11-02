@@ -61,6 +61,9 @@ jobs:
           pnpm probe:camera-arm
           pnpm probe:raise-camera
           pnpm probe:origin
+          # Holds "a closed HUD takes no input". Without it, invisible grab arcs
+          # covered the Start disc for a month with every other check here green.
+          pnpm probe:chips
           # docs/plans/session-extraction.md — the pointer recogniser as pure
           # state, and (probe:session) the whole session running under Node
           # with no UI at all: the claim the extensibility refactor is built

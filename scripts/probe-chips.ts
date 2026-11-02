@@ -12,6 +12,7 @@
  *   node --experimental-strip-types scripts/probe-chips.ts
  */
 
+import { readFileSync } from 'node:fs'
 import { chipPosition } from '../src/chip-arc.ts'
 
 let failures = 0
@@ -199,6 +200,33 @@ function boxes(w: number, h: number, rings = RINGS): Box[] {
     }
   }
   check('neighbouring chips stay ordered and never overlap', bad.length === 0, bad.join('; '))
+}
+
+// A closed HUD takes no input — the assembled bug this case exists for: the
+// `.hit` grab arcs carry their own `pointer-events: stroke`, which outranks the
+// closed scrim's `none`, and once the session extraction built the HUD before
+// the gate they sat invisibly over the Start disc at z-index 30. 2-27% of the
+// disc took a tap on a phone-sized viewport and its centre took none. Chips had
+// already been excused from the same bug one selector at a time, which is how
+// the arcs got missed, so what is asserted is the universal form: a selector
+// naming one child would pass this while a third tenant walked straight past.
+// hud.ts cannot be imported headlessly, so this reads its source; the geometry
+// itself gets measured in a browser with elementFromPoint.
+{
+  const css = readFileSync(new URL('../src/hud.ts', import.meta.url), 'utf8')
+  // The known-good half: the arcs must still be live once it is open, or a rule
+  // that simply killed all input would pass the check below.
+  check(
+    'grab arcs take input when the HUD is open',
+    /\.hud-scrim\.open \{[^}]*pointer-events: auto/.test(css) &&
+      /\.hud-dial \.hit \{ pointer-events: stroke/.test(css),
+    'the open-state input rules have gone',
+  )
+  check(
+    'nothing inside a closed HUD takes input',
+    /\.hud-scrim:not\(\.open\) \* \{ pointer-events: none !important; \}/.test(css),
+    'no universal closed-state rule in hud.ts: an invisible child can eat taps meant for the gate or the picture',
+  )
 }
 
 console.log(failures === 0 ? '\nall chip-arc checks passed' : `\n${failures} failed`)

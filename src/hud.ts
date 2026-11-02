@@ -285,8 +285,17 @@ const CSS = `
    regardless of its parent — so with the HUD shut, a tap that happened to land
    where an icon sits changed the selected group and swallowed the tap that was
    meant to open the thing. Nothing visible happened, which is the worst
-   version of that bug. */
-.hud-scrim:not(.open) .hud-chip { pointer-events: none; }
+   version of that bug.
+
+   This used to name .hud-chip alone, and the .hit grab arcs had exactly the
+   same bug for as long as they existed: a tap in the wedge was swallowed, and
+   a slight slide committed a hidden band. Since the session extraction built
+   the HUD before the gate, at z-index 30 over the gate's 10, the arcs also
+   covered the Start disc — measured at 390x844, 8% of it took a tap and its
+   centre did not. So this is universal and !important rather than a second
+   selector: the next thing added in here must not be able to forget.
+   probe:chips holds it. */
+.hud-scrim:not(.open) * { pointer-events: none !important; }
 /* docs/todo.md entry 77: the button itself is the touch target and stays a
    fixed 3rem always — a hand doesn't get less thumb-safe for being on the
    outer ring. Everything drawn (the circle, the border, the icon) lives on

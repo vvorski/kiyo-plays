@@ -98,6 +98,22 @@ export const HOLD_ARM_S = CHARGE_TIME + 1.0
 export const HOLD_ARM_SLOP_PX = 24
 
 /**
+ * Whether anything on the picture can arm camera mode — the still hold and
+ * the mouse click both. **Off, by Victor's decision of 2026-11-01** (docs/
+ * todo.md entry 129): the tap after a 3.5s hold took a photo instead of
+ * playing, and read as a mode that had stopped answering. Parked rather than
+ * deleted — the arm state machine, the shot path, the glyph and the
+ * `deps.camera` port are all still here and still probed, so turning the
+ * mode back on is this one constant, not a rebuild.
+ *
+ * One switch for both routes on purpose: gating only the finger left a mouse
+ * click arming the camera, and the click after it shooting, which is the
+ * same dead-feeling tap on desktop. Anything that adds a third way to arm
+ * must read this too, or the mode is not parked, it is merely hidden.
+ */
+export const CAMERA_ARMING_ENABLED = false
+
+/**
  * How disturbed the phone may be before gestures stop being answered —
  * docs/todo.md entry 125. Victor: "shake is getting good, we don't want the
  * menu coming up accidentally."
@@ -460,7 +476,7 @@ export function dispatchGestures(state: GestureState, now: number, deps: Gesture
       // Reached only when `cameraMode` is false: the branch above already
       // took the armed case and shot. That is what keeps one click from
       // arming and shooting at once.
-      if (state.mousePointers.has(e.id)) {
+      if (CAMERA_ARMING_ENABLED && state.mousePointers.has(e.id)) {
         deps.camera.arm()
         continue
       }
@@ -593,6 +609,7 @@ export function dispatchGestures(state: GestureState, now: number, deps: Gesture
       state.longestStillHold = Math.max(state.longestStillHold, t.downFor)
     }
     if (
+      CAMERA_ARMING_ENABLED &&
       state.holdOpenedBy === null &&
       t.downFor >= HOLD_ARM_S &&
       Math.hypot(t.clientX - t.downClientX, t.clientY - t.downClientY) <= HOLD_ARM_SLOP_PX &&

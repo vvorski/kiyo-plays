@@ -15,6 +15,7 @@ import {
   dispatchGestures,
   noteDisturb,
   type GestureDeps,
+  CAMERA_ARMING_ENABLED,
   HOLD_ARM_S,
   TAP_RESOLVE_MS,
   DOUBLE_TAP_RADIUS_PX,
@@ -165,17 +166,28 @@ function rig(opts: { shellOpen?: boolean; emitterAt?: { x: number; y: number } }
   check('a drag then a tap is not a double', !r.calls.includes('open'), r.calls.join(','))
 }
 
-// 5. A still hold of HOLD_ARM_S arms the camera; the next down shoots and disarms.
+// 5. Camera arming is parked (entry 129): a still hold of HOLD_ARM_S does
+//    nothing, and the next tap is an ordinary tap, not a shutter. The
+//    known-good half is the shot path itself, driven by arming the port
+//    directly, so "parked" cannot be confused with "the shot path broke".
 {
+  check('arming is parked', CAMERA_ARMING_ENABLED === false, String(CAMERA_ARMING_ENABLED))
   const r = rig()
   r.down(1, 200, 300)
   r.run(Math.ceil(HOLD_ARM_S / DT) + 2)
-  check('a still hold arms the camera', r.calls.includes('arm'), r.calls.join(','))
+  check('a still hold does not arm the camera', !r.calls.includes('arm'), r.calls.join(','))
   r.up(1)
   r.run(2)
   r.down(2, 200, 300)
   r.run(1)
-  check('the next down shoots', r.calls.includes('shoot'), r.calls.join(','))
+  check('the next tap does not shoot', !r.calls.includes('shoot'), r.calls.join(','))
+}
+{
+  const r = rig()
+  r.deps.camera.arm()
+  r.down(1, 200, 300)
+  r.run(1)
+  check('known good: an armed camera still shoots on the next down', r.calls.includes('shoot'), r.calls.join(','))
   check('and does not open the shell', !r.calls.includes('open'), r.calls.join(','))
 }
 

@@ -369,7 +369,9 @@ eye") already concedes.
 meaning are untouched · url no · capture no · dependency no.
 
 ### 74. Paper: true white, true black, and ink that takes or doesn't
-`status: blocked` · added 2026-08-30 · build after 68
+`status: ready` · added 2026-08-30 · build after 68
+
+**Victor, 2026-11-01: build it, then compare side by side** with the shipped look before it is kept. If he prefers the shipped middle, close it unbuilt. Builds after 68.
 
 **Blocked 2026-08-30 — needs Victor's decision, and must not be built
 meanwhile.** Entries 68 and 70 shipped (builds 229 and 234) and the result was
@@ -2906,6 +2908,8 @@ and after); then an iPhone. No HUD surface is touched.
 ### 129. The tap after a hold is a shutter, not a play — is that the price?
 `status: blocked` · added 2026-09-05 · found at build 416 with the entry above · **needs Victor** · concerns 115 and 125
 
+**Victor, 2026-11-01: "let's park the photo mode for now."** Not one of the four costed options. Still blocked on one clarification: does "park" mean disable hold-to-arm (so a hold does nothing and the next tap plays), or leave it as is while the camera work waits? Do not build until answered.
+
 **Do** — nothing yet. This puts a cost to Victor that entries 115 and 125 each
 recorded and neither put to him.
 **Why** — since build 415 a finger held still on the picture for **3.5 s**
@@ -4418,7 +4422,9 @@ is the thing entry 63 declined and which Victor has approved in this request
 63 was avoiding · capture **no** · dependency **no**.
 
 ### 143. A held space bar fires one shake, not a repeating one — is that the price?
-`status: blocked` · added 2026-09-05 · found while building 126 · needs Victor
+`status: closed` · added 2026-09-05 · found while building 126 · needs Victor
+
+**Victor, 2026-11-01: one shake per unbroken press is the answer.** Matches a real accelerometer; no timer is added. Closed unbuilt.
 
 **Do** — decide whether a continuously held space bar should keep re-seeding
 for as long as it is held, or whether firing once per unbroken press (settling,
@@ -5061,8 +5067,9 @@ geometric view with a drag in each, side by side, at both phone sizes.
 **Hard stops** — prefs no · url no · capture no · dependency no.
 
 ### 148. What `engine/` is called
-`status: blocked` · added 2026-09-11 · build after 147 — needs Victor's
-choice
+`status: ready` · added 2026-09-11 · build after 147 — Victor chose Option A (2026-11-01)
+
+**Victor, 2026-11-01: Option A** — `inputs/` with `audio/` as a subdirectory. Still builds after 147.
 
 **Do** — rename `engine/` to match what it actually holds, once Phase 2 has
 moved the sensors that don't belong to audio analysis out of `scene.ts` and
